@@ -219,69 +219,70 @@ func TestSymlinkTarget(t *testing.T) {
 	}
 }
 
-func TestActiveEmail(t *testing.T) {
-	tests := []struct {
-		name      string
-		email     string
-		wantEmail string
-		wantErr   bool
-	}{
-		{"valid email", "alice@example.com", "alice@example.com", false},
-		{"empty email returns unknown", "", "(unknown)", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			keyring.MockInit()
-			ch := NewClaudeHome(t.TempDir())
-
-			creds := fakeCredentials(tt.email)
-			keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(creds))
-
-			got, err := ch.ActiveEmail()
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("ActiveEmail() expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ActiveEmail() error: %v", err)
-			}
-			if got != tt.wantEmail {
-				t.Errorf("ActiveEmail() = %q, want %q", got, tt.wantEmail)
-			}
-		})
-	}
-}
-
-func TestActiveEmail_noKeychain(t *testing.T) {
+func TestActiveAccountInfo(t *testing.T) {
 	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
 
-	_, err := ch.ActiveEmail()
-	if err == nil {
-		t.Fatal("ActiveEmail() expected error for missing keychain, got nil")
+	creds := fakeCredentials("alice@example.com")
+	keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(creds))
+
+	info, err := ch.ActiveAccountInfo()
+	if err != nil {
+		t.Fatalf("ActiveAccountInfo() error: %v", err)
+	}
+	if info.Email != "alice@example.com" {
+		t.Errorf("Email = %q, want %q", info.Email, "alice@example.com")
+	}
+	if info.Label() != "alice@example.com" {
+		t.Errorf("Label() = %q, want %q", info.Label(), "alice@example.com")
 	}
 }
 
-func TestActiveEmail_malformedJSON(t *testing.T) {
+func TestActiveAccountInfo_noEmail(t *testing.T) {
+	keyring.MockInit()
+	ch := NewClaudeHome(t.TempDir())
+
+	creds := fakeCredentials("")
+	keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(creds))
+
+	info, err := ch.ActiveAccountInfo()
+	if err != nil {
+		t.Fatalf("ActiveAccountInfo() error: %v", err)
+	}
+	// Label falls back to OS username when no email
+	if info.Label() == "" {
+		t.Error("Label() should not be empty")
+	}
+}
+
+func TestActiveAccountInfo_noKeychain(t *testing.T) {
+	keyring.MockInit()
+	ch := NewClaudeHome(t.TempDir())
+
+	_, err := ch.ActiveAccountInfo()
+	if err == nil {
+		t.Fatal("expected error for missing keychain, got nil")
+	}
+}
+
+func TestActiveAccountInfo_malformedJSON(t *testing.T) {
 	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
 	keyring.Set(claudeKeychainService, claudeKeychainAccount(), "not json")
 
-	_, err := ch.ActiveEmail()
+	_, err := ch.ActiveAccountInfo()
 	if err == nil {
-		t.Fatal("ActiveEmail() expected error for malformed JSON, got nil")
+		t.Fatal("expected error for malformed JSON, got nil")
 	}
 }
 
-func TestActiveEmail_missingOAuthKey(t *testing.T) {
+func TestActiveAccountInfo_missingOAuthKey(t *testing.T) {
 	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
 	keyring.Set(claudeKeychainService, claudeKeychainAccount(), `{"otherKey": {}}`)
 
-	_, err := ch.ActiveEmail()
+	_, err := ch.ActiveAccountInfo()
 	if err == nil {
-		t.Fatal("ActiveEmail() expected error for missing claudeAiOauth key, got nil")
+		t.Fatal("expected error for missing claudeAiOauth key, got nil")
 	}
 }

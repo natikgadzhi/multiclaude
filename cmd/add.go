@@ -59,17 +59,18 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	// Extract email from credentials.
-	email, err := ch.ActiveEmail()
+	// Extract account info from credentials.
+	info, err := ch.ActiveAccountInfo()
 	if err != nil {
 		return errors.Wrap(
 			err,
-			"Could not determine account email from credentials",
+			"Could not read account info from credentials",
 			"Ensure you are logged into Claude Code with a valid account.",
 		)
 	}
+	label := info.Label()
 
-	debug.Log("adding profile %q for %s", name, email)
+	debug.Log("adding profile %q for %s", name, label)
 
 	// Read current settings (may not exist).
 	settings, err := ch.ReadSettings()
@@ -79,7 +80,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create the profile.
-	if err := store.Create(name, creds, settings, email); err != nil {
+	if err := store.Create(name, creds, settings, label); err != nil {
 		return fmt.Errorf("creating profile: %w", err)
 	}
 
@@ -105,6 +106,6 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Added profile: %s (%s)\n", name, email)
+	fmt.Fprintf(cmd.OutOrStdout(), "Added profile: %s (%s)\n", name, label)
 	return nil
 }

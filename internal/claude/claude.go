@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	"github.com/zalando/go-keyring"
@@ -28,12 +29,16 @@ const (
 )
 
 // claudeKeychainAccount returns the keychain account Claude Code uses.
-// Claude Code stores credentials under the OS username as the account.
+// Claude Code stores credentials under the OS username.
 func claudeKeychainAccount() string {
-	if u, err := os.UserHomeDir(); err == nil {
-		return filepath.Base(u)
+	if u, err := user.Current(); err == nil {
+		return u.Username
 	}
-	return "default"
+	// Fallback: derive from home directory.
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Base(home)
+	}
+	return ""
 }
 
 // settingsPath returns the full path to settings.json.
@@ -110,52 +115,59 @@ func (ch *ClaudeHome) WriteSettings(settings map[string]any) error {
 	return atomicWrite(ch.settingsPath(), data, 0644)
 }
 
-// ActiveEmail extracts the account email from .credentials.json.
-//
-// Claude Code stores credentials as a JSON object where the top-level key
-// "claudeAiOauth" contains an object with the "email" field. The structure is:
-//
-//	{
-//	  "claudeAiOauth": {
-//	    "token": "...",
-//	    "expiresAt": "...",
-//	    "refreshToken": "...",
-//	    "email": "user@example.com"
-//	  }
-//	}
-func (ch *ClaudeHome) ActiveEmail() (string, error) {
-	data, err := ch.ReadCredentials()
-	if err != nil {
-		return "", err
-	}
-	return extractEmail(data)
+// AccountInfo holds identifying information extracted from Claude Code credentials.
+type AccountInfo struct {
+	Email            string // may be empty if not present in credentials
+	SubscriptionType string // e.g. "individual", "team"
+	RateLimitTier    string // e.g. "free", "pro"
 }
 
-// extractEmail pulls the email from credential JSON bytes.
-// It looks for the email field inside the "claudeAiOauth" object.
-func extractEmail(data []byte) (string, error) {
+// Label returns a human-readable label for the account.
+// Uses email if available, otherwise subscription type, otherwise OS username.
+func (a *AccountInfo) Label() string {
+	if a.Email != "" {
+		return a.Email
+	}
+	if a.SubscriptionType != "" {
+		return a.SubscriptionType
+	}
+	return claudeKeychainAccount()
+}
+
+// ActiveAccountInfo extracts account information from the Claude Code credentials.
+func (ch *ClaudeHome) ActiveAccountInfo() (*AccountInfo, error) {
+	data, err := ch.ReadCredentials()
+	if err != nil {
+		return nil, err
+	}
+	return extractAccountInfo(data)
+}
+
+func extractAccountInfo(data []byte) (*AccountInfo, error) {
 	var creds map[string]json.RawMessage
 	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("parsing credentials: %w", err)
+		return nil, fmt.Errorf("parsing credentials: %w", err)
 	}
 
 	oauthRaw, ok := creds["claudeAiOauth"]
 	if !ok {
-		return "", fmt.Errorf("credentials missing claudeAiOauth key")
+		return nil, fmt.Errorf("credentials missing claudeAiOauth key")
 	}
 
 	var oauth struct {
-		Email string `json:"email"`
+		Email            string `json:"email"`
+		SubscriptionType string `json:"subscriptionType"`
+		RateLimitTier    string `json:"rateLimitTier"`
 	}
 	if err := json.Unmarshal(oauthRaw, &oauth); err != nil {
-		return "", fmt.Errorf("parsing claudeAiOauth: %w", err)
+		return nil, fmt.Errorf("parsing claudeAiOauth: %w", err)
 	}
 
-	if oauth.Email == "" {
-		// Some Claude Code versions don't store email in credentials.
-		return "(unknown)", nil
-	}
-	return oauth.Email, nil
+	return &AccountInfo{
+		Email:            oauth.Email,
+		SubscriptionType: oauth.SubscriptionType,
+		RateLimitTier:    oauth.RateLimitTier,
+	}, nil
 }
 
 // atomicWrite writes data to a temporary file in the same directory as path
