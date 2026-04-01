@@ -2,10 +2,14 @@
 package config
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/BurntSushi/toml"
 	cliconfig "github.com/natikgadzhi/cli-kit/config"
 )
 
@@ -93,4 +97,77 @@ func BackupsDir() (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+// ActiveFilePath returns the path to ~/.config/multiclaude/active,
+// which stores the name of the currently active profile.
+func ActiveFilePath() (string, error) {
+	base, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "active"), nil
+}
+
+// ReadActiveProfile reads the name of the currently active profile
+// from the active state file. Returns "" if the file doesn't exist.
+func ReadActiveProfile() (string, error) {
+	path, err := ActiveFilePath()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("reading active profile: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// WriteActiveProfile writes the name of the active profile to the state file.
+// Pass an empty string to clear the active profile.
+func WriteActiveProfile(name string) error {
+	path, err := ActiveFilePath()
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("clearing active profile: %w", err)
+		}
+		return nil
+	}
+	return os.WriteFile(path, []byte(name+"\n"), 0o644)
+}
+
+// ConfigFilePath returns the path to the config file, ensuring the
+// config directory exists.
+func ConfigFilePath() (string, error) {
+	base, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "config.toml"), nil
+}
+
+// Save writes the Config to the given path in TOML format.
+func Save(path string, cfg *Config) error {
+	expanded, err := cliconfig.ExpandTilde(path)
+	if err != nil {
+		return err
+	}
+
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(expanded), 0o755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	var buf bytes.Buffer
+	enc := toml.NewEncoder(&buf)
+	if err := enc.Encode(cfg); err != nil {
+		return fmt.Errorf("encoding config: %w", err)
+	}
+	return os.WriteFile(expanded, buf.Bytes(), 0o644)
 }

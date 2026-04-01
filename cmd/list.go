@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/natikgadzhi/cli-kit/output"
+	"github.com/natikgadzhi/cli-kit/table"
+	"github.com/natikgadzhi/multiclaude/internal/profile"
 	"github.com/spf13/cobra"
 )
 
@@ -11,8 +13,74 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Show all profiles",
 	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(os.Stderr, "not implemented yet")
+	RunE:  runList,
+}
+
+// profileListJSON is the JSON representation of a profile for list output.
+type profileListJSON struct {
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Status string `json:"status"`
+}
+
+// profileListRenderer implements output.TableRenderer for a slice of profiles.
+type profileListRenderer struct {
+	profiles []profile.Profile
+}
+
+func (r *profileListRenderer) RenderTable(t *table.Table) {
+	t.Header("Profile", "Email", "Status")
+	for _, p := range r.profiles {
+		status := ""
+		if p.IsActive {
+			status = "active"
+		}
+		t.Row(p.Name, p.Email, status)
+	}
+}
+
+func runList(cmd *cobra.Command, _ []string) error {
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+
+	store, err := newProfileStore(cfg)
+	if err != nil {
+		return err
+	}
+
+	profiles, err := store.List()
+	if err != nil {
+		return fmt.Errorf("listing profiles: %w", err)
+	}
+
+	format := output.Resolve(cmd)
+
+	if len(profiles) == 0 {
+		if output.IsTable(format) {
+			fmt.Fprintln(cmd.OutOrStdout(), "No profiles found. Run 'multiclaude add <name>' to create one.")
+		} else {
+			// JSON: empty array
+			output.PrintJSON([]any{})
+		}
 		return nil
-	},
+	}
+
+	// Build JSON data.
+	jsonData := make([]profileListJSON, len(profiles))
+	for i, p := range profiles {
+		status := ""
+		if p.IsActive {
+			status = "active"
+		}
+		jsonData[i] = profileListJSON{
+			Name:   p.Name,
+			Email:  p.Email,
+			Status: status,
+		}
+	}
+
+	renderer := &profileListRenderer{profiles: profiles}
+	return output.Print(format, jsonData, renderer)
 }

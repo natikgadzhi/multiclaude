@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/natikgadzhi/multiclaude/internal/claude"
@@ -32,6 +33,7 @@ type metadata struct {
 type Store struct {
 	profilesDir string
 	claudeHome  *claude.ClaudeHome
+	activeFile  string // path to the active profile state file (may be empty)
 }
 
 // NewStore creates a Store that manages profiles under profilesDir and
@@ -41,6 +43,89 @@ func NewStore(profilesDir string, claudeHome *claude.ClaudeHome) *Store {
 		profilesDir: profilesDir,
 		claudeHome:  claudeHome,
 	}
+}
+
+// SetActiveFile sets the path to the active profile state file.
+// When set, ActiveProfileName checks this file before falling back
+// to symlink detection.
+func (s *Store) SetActiveFile(path string) {
+	s.activeFile = path
+}
+
+// WriteActive writes the given profile name to the active state file.
+// Returns an error if no active file path has been configured.
+func (s *Store) WriteActive(name string) error {
+	if s.activeFile == "" {
+		return fmt.Errorf("no active file path configured")
+	}
+	if name == "" {
+		if err := os.Remove(s.activeFile); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("clearing active profile: %w", err)
+		}
+		return nil
+	}
+	return os.WriteFile(s.activeFile, []byte(name+"\n"), 0o644)
+}
+
+// SaveState saves the current ClaudeHome credentials and settings into
+// the given profile's directory. Used for auto-saving state before switching.
+func (s *Store) SaveState(name string) error {
+	dir := s.ProfileDir(name)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return fmt.Errorf("profile %q does not exist", name)
+	}
+
+	// Save credentials to keychain.
+	creds, err := s.claudeHome.ReadCredentials()
+	if err == nil {
+		_ = keychain.StoreCredentials(name, creds)
+	}
+
+	// Save settings snapshot.
+	settings, err := s.claudeHome.ReadSettings()
+	if err == nil {
+		settingsBytes, err := json.MarshalIndent(settings, "", "  ")
+		if err == nil {
+			settingsBytes = append(settingsBytes, '\n')
+			_ = os.WriteFile(filepath.Join(dir, "settings.json"), settingsBytes, 0o644)
+		}
+	}
+
+	return nil
+}
+
+// RestoreState writes a profile's credentials and settings into ClaudeHome.
+func (s *Store) RestoreState(name string) error {
+	dir := s.ProfileDir(name)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return fmt.Errorf("profile %q does not exist", name)
+	}
+
+	if err := os.MkdirAll(s.claudeHome.Path, 0o755); err != nil {
+		return fmt.Errorf("creating claude home: %w", err)
+	}
+
+	creds, err := keychain.GetCredentials(name)
+	if err != nil {
+		return fmt.Errorf("retrieving credentials for %q: %w", name, err)
+	}
+	if err := s.claudeHome.WriteCredentials(creds); err != nil {
+		return fmt.Errorf("writing credentials: %w", err)
+	}
+
+	settingsBytes, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		return nil
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(settingsBytes, &settings); err != nil {
+		return fmt.Errorf("parsing profile settings: %w", err)
+	}
+	if err := s.claudeHome.WriteSettings(settings); err != nil {
+		return fmt.Errorf("writing settings: %w", err)
+	}
+
+	return nil
 }
 
 // ProfilesDir returns the root directory where all profiles are stored.
@@ -224,10 +309,23 @@ func (s *Store) Exists(name string) bool {
 	return err == nil
 }
 
-// ActiveProfileName returns the name of the currently active profile by
-// resolving the ClaudeHome symlink back to a profile directory.
-// Returns "" with no error if ClaudeHome is not a symlink (no profile active).
+// ActiveProfileName returns the name of the currently active profile.
+// It first checks the state file (~/.config/multiclaude/active), then
+// falls back to resolving the ClaudeHome symlink for backwards compatibility.
+// Returns "" with no error if no profile is active.
 func (s *Store) ActiveProfileName() (string, error) {
+	// Check the state file first.
+	if s.activeFile != "" {
+		data, err := os.ReadFile(s.activeFile)
+		if err == nil {
+			name := strings.TrimSpace(string(data))
+			if name != "" && s.Exists(name) {
+				return name, nil
+			}
+		}
+	}
+
+	// Fall back to symlink detection.
 	if !s.claudeHome.IsSymlink() {
 		return "", nil
 	}
