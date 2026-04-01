@@ -230,6 +230,9 @@ func (s *Store) List() ([]Profile, error) {
 }
 
 // Delete removes a profile's directory and its keychain entry.
+// Delete removes a profile's data directory and its multiclaude keychain entry.
+// It NEVER touches Claude Code's own credentials ("Claude Code-credentials")
+// or any files in ~/.claude/.
 func (s *Store) Delete(name string) error {
 	dir := s.ProfileDir(name)
 
@@ -237,8 +240,7 @@ func (s *Store) Delete(name string) error {
 		return fmt.Errorf("profile %q does not exist", name)
 	}
 
-	// Remove keychain entry. Ignore errors if the entry doesn't exist
-	// (the profile may have been partially created).
+	// Remove multiclaude's keychain entry only (multiclaude/{name}/oauth).
 	_ = keychain.DeleteCredentials(name)
 
 	if err := os.RemoveAll(dir); err != nil {

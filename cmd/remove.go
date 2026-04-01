@@ -79,7 +79,7 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	// Confirm unless --yes is passed.
 	yes, _ := cmd.Flags().GetBool("yes")
 	if !yes {
-		fmt.Fprintf(os.Stderr, "Remove profile %q? This cannot be undone. [y/N] ", name)
+		fmt.Fprintf(os.Stderr, "Remove profile %q? This deletes multiclaude's saved credentials for this profile.\nYour Claude Code settings and ~/.claude/ are not affected. [y/N] ", name)
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		answer = strings.TrimSpace(strings.ToLower(answer))

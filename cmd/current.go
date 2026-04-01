@@ -17,14 +17,14 @@ var currentCmd = &cobra.Command{
 
 // currentOutput is the JSON-serializable representation of the active profile.
 type currentOutput struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	Name    string `json:"name"`
+	Account string `json:"account"`
 }
 
 // RenderTable implements output.TableRenderer for currentOutput.
 func (c currentOutput) RenderTable(t *table.Table) {
-	t.Header("Profile", "Email")
-	t.Row(c.Name, c.Email)
+	t.Header("Profile", "Account")
+	t.Row(c.Name, c.Account)
 }
 
 func runCurrent(cmd *cobra.Command, args []string) error {
@@ -54,6 +54,6 @@ func runCurrent(cmd *cobra.Command, args []string) error {
 	}
 
 	format := output.Resolve(cmd)
-	data := currentOutput{Name: p.Name, Email: p.Email}
+	data := currentOutput{Name: p.Name, Account: p.Email}
 	return output.Print(format, data, data)
 }
