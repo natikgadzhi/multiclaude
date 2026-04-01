@@ -48,21 +48,13 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	// Read current credentials from ClaudeHome.
+	// Read current credentials from Claude Code's keychain entry.
 	ch := claude.NewClaudeHome(cfg.ClaudeHome)
-	if !ch.Exists() {
-		return errors.Wrap(
-			fmt.Errorf("claude home not found at %s", cfg.ClaudeHome),
-			"No active Claude Code session found",
-			"Log into Claude Code first, then run 'multiclaude add' again.",
-		)
-	}
-
 	creds, err := ch.ReadCredentials()
 	if err != nil {
 		return errors.Wrap(
 			err,
-			"Could not read Claude Code credentials",
+			"No active Claude Code session found",
 			"Log into Claude Code first, then run 'multiclaude add' again.",
 		)
 	}

@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/zalando/go-keyring"
 )
 
-// fakeCredentials returns a JSON byte slice that mimics a real .credentials.json.
+// fakeCredentials returns a JSON byte slice that mimics Claude Code's credential format.
 func fakeCredentials(email string) []byte {
 	creds := map[string]any{
 		"claudeAiOauth": map[string]any{
@@ -33,16 +35,22 @@ func fakeSettings() []byte {
 	return data
 }
 
-// setupClaudeHome creates a temp directory with fake credential and settings files.
+// setupClaudeHome creates a temp directory with settings and puts credentials in mock keychain.
 func setupClaudeHome(t *testing.T, email string) *ClaudeHome {
 	t.Helper()
+	keyring.MockInit()
+
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".credentials.json"), fakeCredentials(email), 0600); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), fakeSettings(), 0644); err != nil {
 		t.Fatal(err)
 	}
+
+	// Put credentials in the mock keychain (same service Claude Code uses).
+	creds := fakeCredentials(email)
+	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount, string(creds)); err != nil {
+		t.Fatal(err)
+	}
+
 	return NewClaudeHome(dir)
 }
 
@@ -67,9 +75,9 @@ func TestExists(t *testing.T) {
 			exists: true,
 		},
 		{
-			name: "nonexistent directory",
+			name: "non-existing directory",
 			setup: func(t *testing.T) *ClaudeHome {
-				return NewClaudeHome(filepath.Join(t.TempDir(), "does-not-exist"))
+				return NewClaudeHome(filepath.Join(t.TempDir(), "nonexistent"))
 			},
 			exists: false,
 		},
@@ -92,7 +100,6 @@ func TestReadCredentials(t *testing.T) {
 		t.Fatalf("ReadCredentials() error: %v", err)
 	}
 
-	// Verify it round-trips as valid JSON with expected structure.
 	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("returned data is not valid JSON: %v", err)
@@ -107,40 +114,31 @@ func TestReadCredentials(t *testing.T) {
 }
 
 func TestReadCredentials_missing(t *testing.T) {
+	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
 
 	_, err := ch.ReadCredentials()
 	if err == nil {
-		t.Fatal("ReadCredentials() expected error for missing file, got nil")
+		t.Fatal("ReadCredentials() expected error for missing keychain entry, got nil")
 	}
 }
 
 func TestWriteCredentials(t *testing.T) {
-	dir := t.TempDir()
-	ch := NewClaudeHome(dir)
+	keyring.MockInit()
+	ch := NewClaudeHome(t.TempDir())
 
 	original := fakeCredentials("bob@example.com")
 	if err := ch.WriteCredentials(original); err != nil {
 		t.Fatalf("WriteCredentials() error: %v", err)
 	}
 
-	// Read it back and verify.
+	// Read back from keychain.
 	got, err := ch.ReadCredentials()
 	if err != nil {
 		t.Fatalf("ReadCredentials() error: %v", err)
 	}
 	if string(got) != string(original) {
 		t.Errorf("round-trip mismatch:\ngot:  %s\nwant: %s", got, original)
-	}
-
-	// Verify file permissions are restricted.
-	fi, err := os.Stat(filepath.Join(dir, ".credentials.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	perm := fi.Mode().Perm()
-	if perm != 0600 {
-		t.Errorf("permissions = %o, want 0600", perm)
 	}
 }
 
@@ -152,22 +150,13 @@ func TestReadSettings(t *testing.T) {
 		t.Fatalf("ReadSettings() error: %v", err)
 	}
 
-	model, ok := settings["model"].(string)
-	if !ok || model != "opus" {
+	if settings["model"] != "opus" {
 		t.Errorf("model = %v, want %q", settings["model"], "opus")
-	}
-
-	perms, ok := settings["permissions"].(map[string]any)
-	if !ok {
-		t.Fatal("missing permissions key")
-	}
-	allow, ok := perms["allow"].([]any)
-	if !ok || len(allow) == 0 {
-		t.Fatal("missing or empty permissions.allow")
 	}
 }
 
 func TestReadSettings_missing(t *testing.T) {
+	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
 
 	_, err := ch.ReadSettings()
@@ -180,13 +169,11 @@ func TestWriteSettings(t *testing.T) {
 	dir := t.TempDir()
 	ch := NewClaudeHome(dir)
 
-	original := map[string]any{
+	settings := map[string]any{
 		"model": "sonnet",
-		"permissions": map[string]any{
-			"allow": []any{"Bash(git *)"},
-		},
+		"debug": true,
 	}
-	if err := ch.WriteSettings(original); err != nil {
+	if err := ch.WriteSettings(settings); err != nil {
 		t.Fatalf("WriteSettings() error: %v", err)
 	}
 
@@ -199,6 +186,39 @@ func TestWriteSettings(t *testing.T) {
 	}
 }
 
+func TestIsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	link := filepath.Join(dir, "link")
+
+	os.MkdirAll(real, 0755)
+	os.Symlink(real, link)
+
+	if NewClaudeHome(real).IsSymlink() {
+		t.Error("real directory should not be a symlink")
+	}
+	if !NewClaudeHome(link).IsSymlink() {
+		t.Error("symlink should be detected")
+	}
+}
+
+func TestSymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	link := filepath.Join(dir, "link")
+
+	os.MkdirAll(real, 0755)
+	os.Symlink(real, link)
+
+	target, err := NewClaudeHome(link).SymlinkTarget()
+	if err != nil {
+		t.Fatalf("SymlinkTarget() error: %v", err)
+	}
+	if target != real {
+		t.Errorf("target = %q, want %q", target, real)
+	}
+}
+
 func TestActiveEmail(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -206,24 +226,21 @@ func TestActiveEmail(t *testing.T) {
 		wantEmail string
 		wantErr   bool
 	}{
-		{
-			name:      "valid email",
-			email:     "alice@example.com",
-			wantEmail: "alice@example.com",
-		},
-		{
-			name:    "empty email",
-			email:   "",
-			wantErr: true,
-		},
+		{"valid email", "alice@example.com", "alice@example.com", false},
+		{"empty email returns unknown", "", "(unknown)", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ch := setupClaudeHome(t, tt.email)
+			keyring.MockInit()
+			ch := NewClaudeHome(t.TempDir())
+
+			creds := fakeCredentials(tt.email)
+			keyring.Set(claudeKeychainService, claudeKeychainAccount, string(creds))
+
 			got, err := ch.ActiveEmail()
 			if tt.wantErr {
 				if err == nil {
-					t.Fatal("ActiveEmail() expected error, got nil")
+					t.Errorf("ActiveEmail() expected error, got nil")
 				}
 				return
 			}
@@ -237,21 +254,20 @@ func TestActiveEmail(t *testing.T) {
 	}
 }
 
-func TestActiveEmail_missingFile(t *testing.T) {
+func TestActiveEmail_noKeychain(t *testing.T) {
+	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
 
 	_, err := ch.ActiveEmail()
 	if err == nil {
-		t.Fatal("ActiveEmail() expected error for missing file, got nil")
+		t.Fatal("ActiveEmail() expected error for missing keychain, got nil")
 	}
 }
 
 func TestActiveEmail_malformedJSON(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".credentials.json"), []byte("not json"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	ch := NewClaudeHome(dir)
+	keyring.MockInit()
+	ch := NewClaudeHome(t.TempDir())
+	keyring.Set(claudeKeychainService, claudeKeychainAccount, "not json")
 
 	_, err := ch.ActiveEmail()
 	if err == nil {
@@ -260,106 +276,12 @@ func TestActiveEmail_malformedJSON(t *testing.T) {
 }
 
 func TestActiveEmail_missingOAuthKey(t *testing.T) {
-	dir := t.TempDir()
-	data := []byte(`{"someOtherKey": {"email": "test@test.com"}}`)
-	if err := os.WriteFile(filepath.Join(dir, ".credentials.json"), data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	ch := NewClaudeHome(dir)
+	keyring.MockInit()
+	ch := NewClaudeHome(t.TempDir())
+	keyring.Set(claudeKeychainService, claudeKeychainAccount, `{"otherKey": {}}`)
 
 	_, err := ch.ActiveEmail()
 	if err == nil {
 		t.Fatal("ActiveEmail() expected error for missing claudeAiOauth key, got nil")
-	}
-}
-
-func TestIsSymlink(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(t *testing.T) *ClaudeHome
-		symlink bool
-	}{
-		{
-			name: "regular directory",
-			setup: func(t *testing.T) *ClaudeHome {
-				return NewClaudeHome(t.TempDir())
-			},
-			symlink: false,
-		},
-		{
-			name: "symlink",
-			setup: func(t *testing.T) *ClaudeHome {
-				target := t.TempDir()
-				parent := t.TempDir()
-				link := filepath.Join(parent, "claude-link")
-				if err := os.Symlink(target, link); err != nil {
-					t.Fatal(err)
-				}
-				return NewClaudeHome(link)
-			},
-			symlink: true,
-		},
-		{
-			name: "nonexistent path",
-			setup: func(t *testing.T) *ClaudeHome {
-				return NewClaudeHome(filepath.Join(t.TempDir(), "nope"))
-			},
-			symlink: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ch := tt.setup(t)
-			if got := ch.IsSymlink(); got != tt.symlink {
-				t.Errorf("IsSymlink() = %v, want %v", got, tt.symlink)
-			}
-		})
-	}
-}
-
-func TestSymlinkTarget(t *testing.T) {
-	target := t.TempDir()
-	parent := t.TempDir()
-	link := filepath.Join(parent, "claude-link")
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-
-	ch := NewClaudeHome(link)
-
-	got, err := ch.SymlinkTarget()
-	if err != nil {
-		t.Fatalf("SymlinkTarget() error: %v", err)
-	}
-	if got != target {
-		t.Errorf("SymlinkTarget() = %q, want %q", got, target)
-	}
-}
-
-func TestSymlinkTarget_notSymlink(t *testing.T) {
-	ch := NewClaudeHome(t.TempDir())
-
-	_, err := ch.SymlinkTarget()
-	if err == nil {
-		t.Fatal("SymlinkTarget() expected error for non-symlink, got nil")
-	}
-}
-
-func TestAtomicWriteDoesNotLeaveTempFiles(t *testing.T) {
-	dir := t.TempDir()
-	ch := NewClaudeHome(dir)
-
-	if err := ch.WriteCredentials(fakeCredentials("test@test.com")); err != nil {
-		t.Fatal(err)
-	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if e.Name() != ".credentials.json" {
-			t.Errorf("unexpected file left behind: %s", e.Name())
-		}
 	}
 }

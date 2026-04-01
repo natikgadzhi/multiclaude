@@ -1,5 +1,6 @@
-// Package claude provides read/write access to Claude Code's home directory,
-// including credentials and settings files.
+// Package claude provides read/write access to Claude Code's home directory
+// and credentials. Credentials are stored in the OS keychain (not on disk)
+// under the service "Claude Code-credentials".
 package claude
 
 import (
@@ -7,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/zalando/go-keyring"
 )
 
 // ClaudeHome represents a Claude Code home directory (typically ~/.claude).
@@ -19,10 +22,12 @@ func NewClaudeHome(path string) *ClaudeHome {
 	return &ClaudeHome{Path: path}
 }
 
-// credentialsPath returns the full path to .credentials.json.
-func (ch *ClaudeHome) credentialsPath() string {
-	return filepath.Join(ch.Path, ".credentials.json")
-}
+const (
+	// claudeKeychainService is the keychain service used by Claude Code itself.
+	claudeKeychainService = "Claude Code-credentials"
+	// claudeKeychainAccount is the keychain account used by Claude Code.
+	claudeKeychainAccount = "default"
+)
 
 // settingsPath returns the full path to settings.json.
 func (ch *ClaudeHome) settingsPath() string {
@@ -54,21 +59,22 @@ func (ch *ClaudeHome) SymlinkTarget() (string, error) {
 	return target, nil
 }
 
-// ReadCredentials reads the raw bytes of .credentials.json.
-// The raw bytes are returned so they can be stored directly in the keychain
-// without unnecessary parsing or re-serialization.
+// ReadCredentials reads Claude Code's credentials from the OS keychain.
+// Returns the raw JSON bytes (the entire credential object).
 func (ch *ClaudeHome) ReadCredentials() ([]byte, error) {
-	data, err := os.ReadFile(ch.credentialsPath())
+	secret, err := keyring.Get(claudeKeychainService, claudeKeychainAccount)
 	if err != nil {
-		return nil, fmt.Errorf("reading credentials: %w", err)
+		return nil, fmt.Errorf("reading credentials from keychain: %w", err)
 	}
-	return data, nil
+	return []byte(secret), nil
 }
 
-// WriteCredentials writes raw bytes to .credentials.json.
-// The file is written atomically via a temporary file and rename.
+// WriteCredentials writes credentials to Claude Code's OS keychain entry.
 func (ch *ClaudeHome) WriteCredentials(data []byte) error {
-	return atomicWrite(ch.credentialsPath(), data, 0600)
+	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount, string(data)); err != nil {
+		return fmt.Errorf("writing credentials to keychain: %w", err)
+	}
+	return nil
 }
 
 // ReadSettings parses settings.json into a generic map.
@@ -139,7 +145,8 @@ func extractEmail(data []byte) (string, error) {
 	}
 
 	if oauth.Email == "" {
-		return "", fmt.Errorf("email field is empty in credentials")
+		// Some Claude Code versions don't store email in credentials.
+		return "(unknown)", nil
 	}
 	return oauth.Email, nil
 }

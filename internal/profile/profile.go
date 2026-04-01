@@ -67,37 +67,27 @@ func (s *Store) WriteActive(name string) error {
 	return os.WriteFile(s.activeFile, []byte(name+"\n"), 0o644)
 }
 
-// SaveState saves the current ClaudeHome credentials and settings into
-// the given profile's directory. Used for auto-saving state before switching.
+// SaveState saves the current ClaudeHome credentials into the keychain
+// for the given profile. Settings in ~/.claude/ are left untouched —
+// they belong to the user, not to a specific account.
 func (s *Store) SaveState(name string) error {
-	dir := s.ProfileDir(name)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	if _, err := os.Stat(s.ProfileDir(name)); os.IsNotExist(err) {
 		return fmt.Errorf("profile %q does not exist", name)
 	}
 
-	// Save credentials to keychain.
 	creds, err := s.claudeHome.ReadCredentials()
 	if err == nil {
 		_ = keychain.StoreCredentials(name, creds)
 	}
 
-	// Save settings snapshot.
-	settings, err := s.claudeHome.ReadSettings()
-	if err == nil {
-		settingsBytes, err := json.MarshalIndent(settings, "", "  ")
-		if err == nil {
-			settingsBytes = append(settingsBytes, '\n')
-			_ = os.WriteFile(filepath.Join(dir, "settings.json"), settingsBytes, 0o644)
-		}
-	}
-
 	return nil
 }
 
-// RestoreState writes a profile's credentials and settings into ClaudeHome.
+// RestoreState writes a profile's credentials into ClaudeHome.
+// Only credentials are swapped — settings, CLAUDE.md, and projects
+// in ~/.claude/ are preserved across profile switches.
 func (s *Store) RestoreState(name string) error {
-	dir := s.ProfileDir(name)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	if _, err := os.Stat(s.ProfileDir(name)); os.IsNotExist(err) {
 		return fmt.Errorf("profile %q does not exist", name)
 	}
 
@@ -111,18 +101,6 @@ func (s *Store) RestoreState(name string) error {
 	}
 	if err := s.claudeHome.WriteCredentials(creds); err != nil {
 		return fmt.Errorf("writing credentials: %w", err)
-	}
-
-	settingsBytes, err := os.ReadFile(filepath.Join(dir, "settings.json"))
-	if err != nil {
-		return nil
-	}
-	var settings map[string]any
-	if err := json.Unmarshal(settingsBytes, &settings); err != nil {
-		return fmt.Errorf("parsing profile settings: %w", err)
-	}
-	if err := s.claudeHome.WriteSettings(settings); err != nil {
-		return fmt.Errorf("writing settings: %w", err)
 	}
 
 	return nil
