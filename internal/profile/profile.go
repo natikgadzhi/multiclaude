@@ -43,6 +43,11 @@ func NewStore(profilesDir string, claudeHome *claude.ClaudeHome) *Store {
 	}
 }
 
+// ProfilesDir returns the root directory where all profiles are stored.
+func (s *Store) ProfilesDir() string {
+	return s.profilesDir
+}
+
 // ProfileDir returns the filesystem path for a named profile's directory.
 func (s *Store) ProfileDir(name string) string {
 	return filepath.Join(s.profilesDir, name)
