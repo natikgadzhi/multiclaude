@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/multiclaude/internal/claude"
 	"github.com/natikgadzhi/multiclaude/internal/config"
 	"github.com/natikgadzhi/multiclaude/internal/profile"
@@ -19,7 +20,15 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading config flag: %w", err)
 	}
-	return config.Load(cfgPath)
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return nil, errors.Wrap(
+			err,
+			"Could not load configuration",
+			"Check the TOML syntax in your config file. Minimal example:\n\n  # ~/.config/multiclaude/config.toml\n  default_profile = \"work\"\n  claude_home = \"~/.claude\"\n  auto_backup = true",
+		)
+	}
+	return cfg, nil
 }
 
 // newProfileStore creates a profile Store from the loaded config,
@@ -46,7 +55,11 @@ func newProfileStore(cfg *config.Config) (*profile.Store, error) {
 // alphanumeric characters and dashes.
 func validateProfileName(name string) error {
 	if !validName.MatchString(name) {
-		return fmt.Errorf("invalid profile name %q: must contain only alphanumeric characters and dashes", name)
+		return errors.Wrap(
+			fmt.Errorf("invalid profile name %q", name),
+			fmt.Sprintf("Invalid profile name %q", name),
+			"Profile names must contain only letters, numbers, and dashes.\nExamples: work, personal, my-org-1",
+		)
 	}
 	return nil
 }

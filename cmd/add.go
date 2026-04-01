@@ -41,7 +41,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	// Check profile doesn't already exist.
 	if store.Exists(name) {
-		return fmt.Errorf("profile %q already exists", name)
+		return errors.Wrap(
+			fmt.Errorf("profile %q already exists", name),
+			fmt.Sprintf("Profile %q already exists", name),
+			fmt.Sprintf("Use a different name, or remove the existing one first:\n  multiclaude remove %s", name),
+		)
 	}
 
 	// Read current credentials from ClaudeHome.

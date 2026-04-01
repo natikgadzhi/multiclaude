@@ -44,7 +44,7 @@ func runCurrent(cmd *cobra.Command, args []string) error {
 	}
 
 	if activeName == "" {
-		fmt.Println("No active profile. Run 'multiclaude add <name>' to create one.")
+		fmt.Fprintln(cmd.OutOrStdout(), "No active profile. Log into Claude Code first, then run:\n  multiclaude add <name>")
 		return nil
 	}
 

@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/natikgadzhi/multiclaude/internal/claude"
+	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -29,37 +30,59 @@ func runRename(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Validate new name.
+	if err := validateProfileName(newName); err != nil {
+		return err
+	}
+
 	// Validate old exists.
 	if !store.Exists(oldName) {
-		return fmt.Errorf("profile %q does not exist", oldName)
+		profiles, _ := store.List()
+		if len(profiles) == 0 {
+			return errors.Wrap(
+				fmt.Errorf("profile %q not found", oldName),
+				fmt.Sprintf("Profile %q not found", oldName),
+				"No profiles exist yet. Run 'multiclaude add <name>' to create one.",
+			)
+		}
+		names := make([]string, len(profiles))
+		for i, p := range profiles {
+			names[i] = p.Name
+		}
+		return errors.Wrap(
+			fmt.Errorf("profile %q not found", oldName),
+			fmt.Sprintf("Profile %q not found", oldName),
+			fmt.Sprintf("Available profiles: %s", strings.Join(names, ", ")),
+		)
 	}
 
 	// Validate new doesn't exist.
 	if store.Exists(newName) {
-		return fmt.Errorf("profile %q already exists", newName)
+		return errors.Wrap(
+			fmt.Errorf("profile %q already exists", newName),
+			fmt.Sprintf("Profile %q already exists", newName),
+			fmt.Sprintf("Use a different name, or remove the existing one first:\n  multiclaude remove %s", newName),
+		)
 	}
 
-	// Check if we're renaming the active profile so we can update the symlink.
+	// Check if we're renaming the active profile so we can update the active file.
 	activeName, _ := store.ActiveProfileName()
 	isActive := activeName == oldName
 
 	// Perform the rename (directory + keychain).
 	if err := store.Rename(oldName, newName); err != nil {
-		return fmt.Errorf("renaming profile: %w", err)
+		return errors.Wrap(
+			err,
+			fmt.Sprintf("Failed to rename profile %q to %q", oldName, newName),
+			"Run 'multiclaude doctor' to check for issues.",
+		)
 	}
 
-	// If we renamed the active profile, update the symlink.
+	// If we renamed the active profile, update the active file.
 	if isActive {
-		ch := claude.NewClaudeHome(cfg.ClaudeHome)
-		if ch.IsSymlink() {
-			// Remove the old symlink and create a new one pointing to the renamed profile.
-			if err := os.Remove(ch.Path); err != nil {
-				return fmt.Errorf("removing old symlink: %w", err)
-			}
-			newTarget := store.ProfileDir(newName)
-			if err := os.Symlink(newTarget, ch.Path); err != nil {
-				return fmt.Errorf("creating updated symlink: %w", err)
-			}
+		if err := store.WriteActive(newName); err != nil {
+			// Non-fatal: rename succeeded but active tracking is stale.
+			fmt.Fprintf(os.Stderr, "Warning: profile renamed but could not update active state: %v\n", err)
 		}
 	}
 

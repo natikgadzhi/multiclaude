@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -35,13 +36,44 @@ func runRemove(cmd *cobra.Command, args []string) error {
 
 	// Check the profile exists.
 	if !store.Exists(name) {
-		return fmt.Errorf("profile %q does not exist", name)
+		profiles, _ := store.List()
+		if len(profiles) == 0 {
+			return errors.Wrap(
+				fmt.Errorf("profile %q not found", name),
+				fmt.Sprintf("Profile %q not found", name),
+				"No profiles exist yet. Run 'multiclaude list' to see available profiles.",
+			)
+		}
+		names := make([]string, len(profiles))
+		for i, p := range profiles {
+			names[i] = p.Name
+		}
+		return errors.Wrap(
+			fmt.Errorf("profile %q not found", name),
+			fmt.Sprintf("Profile %q not found", name),
+			fmt.Sprintf("Available profiles: %s", strings.Join(names, ", ")),
+		)
 	}
 
 	// Cannot remove the active profile.
 	activeName, _ := store.ActiveProfileName()
 	if activeName == name {
-		return fmt.Errorf("cannot remove the active profile %q. Switch to a different profile first with 'multiclaude use <name>'", name)
+		profiles, _ := store.List()
+		var others []string
+		for _, p := range profiles {
+			if p.Name != name {
+				others = append(others, p.Name)
+			}
+		}
+		suggestion := "Switch to another profile first."
+		if len(others) > 0 {
+			suggestion = fmt.Sprintf("Switch to another profile first:\n  multiclaude use %s", others[0])
+		}
+		return errors.Wrap(
+			fmt.Errorf("cannot remove active profile %q", name),
+			fmt.Sprintf("Cannot remove the active profile %q", name),
+			suggestion,
+		)
 	}
 
 	// Confirm unless --yes is passed.

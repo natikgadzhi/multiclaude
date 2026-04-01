@@ -178,10 +178,13 @@ func checkConfig(path string) checkResult {
 	_, err = mcconfig.Load(path)
 	if err != nil {
 		return checkResult{
-			check:      "Config file",
-			status:     statusFail,
-			detail:     fmt.Sprintf("invalid: %v", err),
-			suggestion: "Fix the TOML syntax in " + expanded,
+			check:  "Config file",
+			status: statusFail,
+			detail: fmt.Sprintf("invalid: %v", err),
+			suggestion: "Fix the TOML syntax in " + expanded + ". Minimal example:\n" +
+				"  default_profile = \"work\"\n" +
+				"  claude_home = \"~/.claude\"\n" +
+				"  auto_backup = true",
 		}
 	}
 	return checkResult{
@@ -249,37 +252,29 @@ func checkProfileKeychain(name string) checkResult {
 }
 
 func checkActiveProfile(ch *claude.ClaudeHome, store *profile.Store) checkResult {
-	if !ch.IsSymlink() {
-		if !ch.Exists() {
-			return checkResult{
-				check:  "Active profile",
-				status: statusWarn,
-				detail: "no Claude home directory",
-			}
-		}
-		return checkResult{
-			check:  "Active profile",
-			status: statusPass,
-			detail: "not managed by multiclaude (no symlink)",
-		}
-	}
-
 	name, err := store.ActiveProfileName()
 	if err != nil {
 		return checkResult{
 			check:      "Active profile",
 			status:     statusFail,
-			detail:     fmt.Sprintf("symlink error: %v", err),
-			suggestion: "Remove the broken symlink and switch profiles: multiclaude use <name>",
+			detail:     fmt.Sprintf("error reading active profile: %v", err),
+			suggestion: "Switch to a profile to fix state: multiclaude use <name>",
 		}
 	}
+
 	if name == "" {
-		target, _ := ch.SymlinkTarget()
+		if !ch.Exists() {
+			return checkResult{
+				check:      "Active profile",
+				status:     statusWarn,
+				detail:     "no Claude home directory and no active profile",
+				suggestion: "Log into Claude Code first, then run: multiclaude add <name>",
+			}
+		}
 		return checkResult{
-			check:      "Active profile",
-			status:     statusFail,
-			detail:     fmt.Sprintf("symlink points outside profiles dir: %s", target),
-			suggestion: "Remove the broken symlink and switch profiles: multiclaude use <name>",
+			check:  "Active profile",
+			status: statusWarn,
+			detail: "Claude home exists but no profile is active",
 		}
 	}
 
@@ -287,7 +282,7 @@ func checkActiveProfile(ch *claude.ClaudeHome, store *profile.Store) checkResult
 		return checkResult{
 			check:      "Active profile",
 			status:     statusFail,
-			detail:     fmt.Sprintf("symlink points to missing profile %q", name),
+			detail:     fmt.Sprintf("active file references missing profile %q", name),
 			suggestion: "Switch to a valid profile: multiclaude use <name>",
 		}
 	}

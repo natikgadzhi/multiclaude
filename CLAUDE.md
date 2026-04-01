@@ -53,7 +53,8 @@ Do NOT reimplement any of these locally.
 - Keychain tests use `keyring.MockInit()` for in-memory mock
 - Profile operations are atomic: write temp file, then rename
 - Credentials never touch disk — keychain only
-- Symlinks are the switching mechanism: `~/.claude` → profile state
+- Copy-based switching: credentials and settings are written into `~/.claude/`
+- Active profile tracked via `~/.config/multiclaude/active` state file
 - Config at `~/.config/multiclaude/config.toml`
 
 ## Claude Code File Layout
