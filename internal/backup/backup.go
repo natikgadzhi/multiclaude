@@ -217,6 +217,36 @@ func (m *Manager) Restore(name string) error {
 	return nil
 }
 
+// PruneAutoBackups deletes the oldest auto-* backups beyond the keep limit.
+// Auto-backups are identified by the "auto-" prefix in their name.
+func (m *Manager) PruneAutoBackups(keep int) error {
+	backups, err := m.List()
+	if err != nil {
+		return fmt.Errorf("listing backups for prune: %w", err)
+	}
+
+	// Filter to only auto-backups. List() returns newest first.
+	var autoBackups []Backup
+	for _, b := range backups {
+		if len(b.Name) > 5 && b.Name[:5] == "auto-" {
+			autoBackups = append(autoBackups, b)
+		}
+	}
+
+	if len(autoBackups) <= keep {
+		return nil
+	}
+
+	// Delete oldest beyond the keep limit (list is newest-first).
+	for _, b := range autoBackups[keep:] {
+		if err := m.Delete(b.Name); err != nil {
+			return fmt.Errorf("pruning auto-backup %q: %w", b.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // Delete removes a backup by name.
 func (m *Manager) Delete(name string) error {
 	backupDir := filepath.Join(m.backupsDir, name)

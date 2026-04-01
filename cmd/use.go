@@ -3,10 +3,15 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/natikgadzhi/cli-kit/debug"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
+	"github.com/natikgadzhi/multiclaude/internal/backup"
+	"github.com/natikgadzhi/multiclaude/internal/claude"
+	"github.com/natikgadzhi/multiclaude/internal/config"
+	"github.com/natikgadzhi/multiclaude/internal/profile"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +55,11 @@ func runUse(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Auto-backup before switching if enabled.
+	if cfg.AutoBackup {
+		autoBackupBeforeSwitch(cfg)
+	}
+
 	format := output.Resolve(cmd)
 
 	// Show spinner during switch.
@@ -89,4 +99,35 @@ func runUse(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Switched to profile: %s (%s)\n", name, p.Email)
 	return nil
+}
+
+// autoBackupBeforeSwitch creates an auto-backup and prunes old ones.
+// Failures are logged but do not block the switch.
+func autoBackupBeforeSwitch(cfg *config.Config) {
+	profilesDir, err := config.ProfilesDir()
+	if err != nil {
+		debug.Log("auto-backup: could not resolve profiles dir: %v", err)
+		return
+	}
+
+	backupsDir, err := config.BackupsDir()
+	if err != nil {
+		debug.Log("auto-backup: could not resolve backups dir: %v", err)
+		return
+	}
+
+	ch := claude.NewClaudeHome(cfg.ClaudeHome)
+	store := profile.NewStore(profilesDir, ch)
+	mgr := backup.NewManager(backupsDir, store)
+
+	name := "auto-" + time.Now().Format("2006-01-02T15-04-05")
+	if err := mgr.Create(name); err != nil {
+		debug.Log("auto-backup: create failed: %v", err)
+		return
+	}
+	debug.Log("auto-backup created: %s", name)
+
+	if err := mgr.PruneAutoBackups(5); err != nil {
+		debug.Log("auto-backup: prune failed: %v", err)
+	}
 }
