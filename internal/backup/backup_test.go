@@ -344,3 +344,76 @@ func TestDelete_NotFound(t *testing.T) {
 		t.Fatal("Delete() expected error for nonexistent backup, got nil")
 	}
 }
+
+func TestPruneAutoBackups(t *testing.T) {
+	mgr, _, _, _ := newTestEnv(t)
+
+	// Create 7 auto-backups and 1 manual backup.
+	names := []string{
+		"auto-2025-01-01T10-00-00",
+		"auto-2025-01-02T10-00-00",
+		"auto-2025-01-03T10-00-00",
+		"auto-2025-01-04T10-00-00",
+		"auto-2025-01-05T10-00-00",
+		"auto-2025-01-06T10-00-00",
+		"auto-2025-01-07T10-00-00",
+		"manual-backup",
+	}
+	for _, n := range names {
+		if err := mgr.Create(n); err != nil {
+			t.Fatalf("Create(%q) error = %v", n, err)
+		}
+	}
+
+	// Prune to keep 5.
+	if err := mgr.PruneAutoBackups(5); err != nil {
+		t.Fatalf("PruneAutoBackups() error = %v", err)
+	}
+
+	backups, err := mgr.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	autoCount := 0
+	manualFound := false
+	for _, b := range backups {
+		if len(b.Name) > 5 && b.Name[:5] == "auto-" {
+			autoCount++
+		}
+		if b.Name == "manual-backup" {
+			manualFound = true
+		}
+	}
+
+	if autoCount != 5 {
+		t.Errorf("PruneAutoBackups(5): %d auto-backups remain, want 5", autoCount)
+	}
+	if !manualFound {
+		t.Error("PruneAutoBackups() deleted manual backup, should only prune auto-* backups")
+	}
+}
+
+func TestPruneAutoBackups_BelowLimit(t *testing.T) {
+	mgr, _, _, _ := newTestEnv(t)
+
+	// Create 2 auto-backups, prune with keep=5 — nothing should be deleted.
+	if err := mgr.Create("auto-2025-01-01T10-00-00"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Create("auto-2025-01-02T10-00-00"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mgr.PruneAutoBackups(5); err != nil {
+		t.Fatalf("PruneAutoBackups() error = %v", err)
+	}
+
+	backups, err := mgr.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 2 {
+		t.Errorf("PruneAutoBackups(5): %d backups remain, want 2", len(backups))
+	}
+}
