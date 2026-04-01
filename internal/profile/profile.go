@@ -78,7 +78,6 @@ func (s *Store) SaveState(name string) error {
 	// Save credentials to keychain.
 	creds, err := s.claudeHome.ReadCredentials()
 	if err == nil {
-		// Best-effort: update keychain with latest credentials.
 		_ = keychain.StoreCredentials(name, creds)
 	}
 
@@ -102,12 +101,10 @@ func (s *Store) RestoreState(name string) error {
 		return fmt.Errorf("profile %q does not exist", name)
 	}
 
-	// Ensure ClaudeHome directory exists.
 	if err := os.MkdirAll(s.claudeHome.Path, 0o755); err != nil {
 		return fmt.Errorf("creating claude home: %w", err)
 	}
 
-	// Restore credentials from keychain.
 	creds, err := keychain.GetCredentials(name)
 	if err != nil {
 		return fmt.Errorf("retrieving credentials for %q: %w", name, err)
@@ -116,10 +113,8 @@ func (s *Store) RestoreState(name string) error {
 		return fmt.Errorf("writing credentials: %w", err)
 	}
 
-	// Restore settings from profile snapshot.
 	settingsBytes, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if err != nil {
-		// Settings may not exist; that's okay for older profiles.
 		return nil
 	}
 	var settings map[string]any
@@ -131,6 +126,11 @@ func (s *Store) RestoreState(name string) error {
 	}
 
 	return nil
+}
+
+// ProfilesDir returns the root directory where all profiles are stored.
+func (s *Store) ProfilesDir() string {
+	return s.profilesDir
 }
 
 // ProfileDir returns the filesystem path for a named profile's directory.
