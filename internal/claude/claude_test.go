@@ -47,7 +47,7 @@ func setupClaudeHome(t *testing.T, email string) *ClaudeHome {
 
 	// Put credentials in the mock keychain (same service Claude Code uses).
 	creds := fakeCredentials(email)
-	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount, string(creds)); err != nil {
+	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(creds)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -235,7 +235,7 @@ func TestActiveEmail(t *testing.T) {
 			ch := NewClaudeHome(t.TempDir())
 
 			creds := fakeCredentials(tt.email)
-			keyring.Set(claudeKeychainService, claudeKeychainAccount, string(creds))
+			keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(creds))
 
 			got, err := ch.ActiveEmail()
 			if tt.wantErr {
@@ -267,7 +267,7 @@ func TestActiveEmail_noKeychain(t *testing.T) {
 func TestActiveEmail_malformedJSON(t *testing.T) {
 	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
-	keyring.Set(claudeKeychainService, claudeKeychainAccount, "not json")
+	keyring.Set(claudeKeychainService, claudeKeychainAccount(), "not json")
 
 	_, err := ch.ActiveEmail()
 	if err == nil {
@@ -278,7 +278,7 @@ func TestActiveEmail_malformedJSON(t *testing.T) {
 func TestActiveEmail_missingOAuthKey(t *testing.T) {
 	keyring.MockInit()
 	ch := NewClaudeHome(t.TempDir())
-	keyring.Set(claudeKeychainService, claudeKeychainAccount, `{"otherKey": {}}`)
+	keyring.Set(claudeKeychainService, claudeKeychainAccount(), `{"otherKey": {}}`)
 
 	_, err := ch.ActiveEmail()
 	if err == nil {

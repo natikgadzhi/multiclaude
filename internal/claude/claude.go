@@ -25,9 +25,16 @@ func NewClaudeHome(path string) *ClaudeHome {
 const (
 	// claudeKeychainService is the keychain service used by Claude Code itself.
 	claudeKeychainService = "Claude Code-credentials"
-	// claudeKeychainAccount is the keychain account used by Claude Code.
-	claudeKeychainAccount = "default"
 )
+
+// claudeKeychainAccount returns the keychain account Claude Code uses.
+// Claude Code stores credentials under the OS username as the account.
+func claudeKeychainAccount() string {
+	if u, err := os.UserHomeDir(); err == nil {
+		return filepath.Base(u)
+	}
+	return "default"
+}
 
 // settingsPath returns the full path to settings.json.
 func (ch *ClaudeHome) settingsPath() string {
@@ -62,7 +69,7 @@ func (ch *ClaudeHome) SymlinkTarget() (string, error) {
 // ReadCredentials reads Claude Code's credentials from the OS keychain.
 // Returns the raw JSON bytes (the entire credential object).
 func (ch *ClaudeHome) ReadCredentials() ([]byte, error) {
-	secret, err := keyring.Get(claudeKeychainService, claudeKeychainAccount)
+	secret, err := keyring.Get(claudeKeychainService, claudeKeychainAccount())
 	if err != nil {
 		return nil, fmt.Errorf("reading credentials from keychain: %w", err)
 	}
@@ -71,7 +78,7 @@ func (ch *ClaudeHome) ReadCredentials() ([]byte, error) {
 
 // WriteCredentials writes credentials to Claude Code's OS keychain entry.
 func (ch *ClaudeHome) WriteCredentials(data []byte) error {
-	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount, string(data)); err != nil {
+	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(data)); err != nil {
 		return fmt.Errorf("writing credentials to keychain: %w", err)
 	}
 	return nil
