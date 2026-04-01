@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/natikgadzhi/cli-kit/debug"
+	"github.com/natikgadzhi/cli-kit/errors"
+	"github.com/natikgadzhi/multiclaude/internal/claude"
+	"github.com/natikgadzhi/multiclaude/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -11,12 +14,101 @@ var addCmd = &cobra.Command{
 	Use:   "add <name>",
 	Short: "Save the current Claude Code session as a named profile",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(os.Stderr, "not implemented yet")
-		return nil
-	},
+	RunE:  runAdd,
 }
 
 func init() {
 	addCmd.Flags().Bool("set-default", false, "Set this profile as the default")
+}
+
+func runAdd(cmd *cobra.Command, args []string) error {
+	name := args[0]
+
+	// Validate profile name.
+	if err := validateProfileName(name); err != nil {
+		return err
+	}
+
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+
+	store, err := newProfileStore(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Check profile doesn't already exist.
+	if store.Exists(name) {
+		return fmt.Errorf("profile %q already exists", name)
+	}
+
+	// Read current credentials from ClaudeHome.
+	ch := claude.NewClaudeHome(cfg.ClaudeHome)
+	if !ch.Exists() {
+		return errors.Wrap(
+			fmt.Errorf("claude home not found at %s", cfg.ClaudeHome),
+			"No active Claude Code session found",
+			"Log into Claude Code first, then run 'multiclaude add' again.",
+		)
+	}
+
+	creds, err := ch.ReadCredentials()
+	if err != nil {
+		return errors.Wrap(
+			err,
+			"Could not read Claude Code credentials",
+			"Log into Claude Code first, then run 'multiclaude add' again.",
+		)
+	}
+
+	// Extract email from credentials.
+	email, err := ch.ActiveEmail()
+	if err != nil {
+		return errors.Wrap(
+			err,
+			"Could not determine account email from credentials",
+			"Ensure you are logged into Claude Code with a valid account.",
+		)
+	}
+
+	debug.Log("adding profile %q for %s", name, email)
+
+	// Read current settings (may not exist).
+	settings, err := ch.ReadSettings()
+	if err != nil {
+		debug.Log("no settings found, using empty: %v", err)
+		settings = make(map[string]any)
+	}
+
+	// Create the profile.
+	if err := store.Create(name, creds, settings, email); err != nil {
+		return fmt.Errorf("creating profile: %w", err)
+	}
+
+	// Check if this is the first profile and mark it active.
+	profiles, _ := store.List()
+	if len(profiles) == 1 {
+		debug.Log("first profile; marking %q as active", name)
+		if err := store.WriteActive(name); err != nil {
+			debug.Log("failed to write active state: %v", err)
+		}
+	}
+
+	// Handle --set-default.
+	setDefault, _ := cmd.Flags().GetBool("set-default")
+	if setDefault {
+		cfg.DefaultProfile = name
+		cfgPath, _ := cmd.Flags().GetString("config")
+		if err := config.Save(cfgPath, cfg); err != nil {
+			// Non-fatal: profile was still created successfully.
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: profile created but could not update config: %v\n", err)
+		} else {
+			debug.Log("set default profile to %q", name)
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Added profile: %s (%s)\n", name, email)
+	return nil
 }
