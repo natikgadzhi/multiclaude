@@ -8,7 +8,7 @@ Claude Code stores credentials and config in `~/.claude/`. If you have multiple 
 
 ## What multiclaude does
 
-multiclaude manages isolated **profiles** — each with its own Claude credentials, settings, and org context — and switches between them instantly by swapping symlinks and keychain entries.
+multiclaude manages isolated **profiles** -- each with its own Claude credentials, settings, and org context -- and switches between them instantly by copying credentials and settings in and out of `~/.claude/`.
 
 ```bash
 # Add your current Claude account as a profile
@@ -55,8 +55,8 @@ multiclaude use personal
 
 Save the current Claude Code session as a named profile. Captures:
 - OAuth credentials (stored in OS keychain, never on disk)
-- User config (`~/.claude/settings.json`, `CLAUDE.md`)
-- Organization/workspace context
+- User settings (`~/.claude/settings.json`)
+- Account email (from the credentials)
 
 ```bash
 multiclaude add work
@@ -65,13 +65,11 @@ multiclaude add personal --set-default
 
 ### `multiclaude use <name>`
 
-Switch to a profile. Swaps credentials and config atomically via symlinks.
+Switch to a profile. Saves the current profile's state, then restores the target profile's credentials and settings into `~/.claude/`.
 
 ```bash
 multiclaude use work
 ```
-
-Shared settings (global CLAUDE.md, projects) are synced across profiles. Account-specific data (tokens, org caches) stays isolated.
 
 ### `multiclaude list`
 
@@ -81,39 +79,53 @@ Show all profiles with the active one highlighted.
 multiclaude list
 ```
 ```
-╭──────────┬────────────────────────┬─────────────────╮
-│ PROFILE  │ EMAIL                  │ STATUS          │
-├──────────┼────────────────────────┼─────────────────┤
-│ work     │ natik@lambda.com       │ active          │
-│ personal │ natik@natikgadzhi.com  │                 │
-╰──────────┴────────────────────────┴─────────────────╯
+PROFILE    EMAIL                   STATUS
+work       natik@lambda.com        active
+personal   natik@natikgadzhi.com
 ```
 
 ### `multiclaude current`
 
 Show the active profile name and associated email.
 
+```bash
+multiclaude current
+```
+
 ### `multiclaude remove <name>`
 
-Delete a profile and its keychain entries. Cannot remove the active profile — switch first.
+Delete a profile and its keychain entries. Cannot remove the active profile -- switch first.
+
+```bash
+multiclaude remove old-account
+```
 
 ### `multiclaude rename <old> <new>`
 
-Rename a profile.
+Rename a profile. Updates the profile directory, keychain entry, and active tracking.
+
+```bash
+multiclaude rename work work-main
+```
 
 ### `multiclaude backup`
 
-Create a snapshot of all profiles and config. Useful before upgrades.
+Create and manage snapshots of all profiles and their credentials. Useful before upgrades.
 
 ```bash
-multiclaude backup create "before-upgrade"
+multiclaude backup create before-upgrade
 multiclaude backup list
-multiclaude backup restore "before-upgrade"
+multiclaude backup restore before-upgrade
+multiclaude backup delete before-upgrade
 ```
 
 ### `multiclaude doctor`
 
-Diagnose common issues: missing credentials, broken symlinks, stale profiles.
+Diagnose common issues: missing credentials, broken state, stale profiles.
+
+```bash
+multiclaude doctor
+```
 
 ## Configuration
 
@@ -132,39 +144,43 @@ auto_backup = true
 
 ## How it works
 
+multiclaude stores profile data under `~/.config/multiclaude/` and credentials in the OS keychain. When you switch profiles, it copies credentials and settings into `~/.claude/`.
+
 ```
 ~/.config/multiclaude/
-├── config.toml
-└── profiles/
-    ├── work/
-    │   ├── credentials.json    # non-sensitive metadata (email, org)
-    │   └── settings.json       # claude settings snapshot
-    └── personal/
-        ├── credentials.json
-        └── settings.json
+├── config.toml                 # multiclaude settings
+├── active                      # name of the currently active profile
+├── profiles/
+│   ├── work/
+│   │   ├── metadata.json       # email, creation time
+│   │   └── settings.json       # Claude settings snapshot
+│   └── personal/
+│       ├── metadata.json
+│       └── settings.json
+└── backups/
+    └── before-upgrade/
+        ├── metadata.json
+        ├── profiles/           # copy of all profile directories
+        └── keychain/           # exported keychain credentials
 
-~/.claude/          → symlink to active profile's Claude state
-Keychain:
-  multiclaude/work/oauth    → OAuth token for work profile
-  multiclaude/personal/oauth → OAuth token for personal profile
+~/.claude/                      # Claude Code reads from here
+├── .credentials.json           # written by multiclaude on switch
+├── settings.json               # written by multiclaude on switch
+├── CLAUDE.md
+└── projects/
+
+OS Keychain:
+  multiclaude/work/oauth        # OAuth token for work profile
+  multiclaude/personal/oauth    # OAuth token for personal profile
 ```
 
-Credentials (OAuth tokens) live exclusively in the OS keychain via `go-keyring` (macOS Keychain, Linux Secret Service, Windows Credential Manager). They are never written to disk.
+**Switching flow:**
+1. `multiclaude use <target>` saves the current profile's credentials (to keychain) and settings (to its profile directory)
+2. Retrieves the target profile's credentials from the keychain
+3. Writes the target profile's credentials and settings into `~/.claude/`
+4. Updates `~/.config/multiclaude/active` to track the active profile
 
-## Differences from claudini
-
-| Feature | multiclaude | claudini |
-|---------|-------------|----------|
-| Language | Go | Rust |
-| Install | `brew install` | curl script |
-| Platforms | macOS, Linux, Windows | macOS only |
-| Credentials | OS keychain (cross-platform) | macOS Keychain only |
-| Config | TOML file | implicit |
-| CLI UX | bordered tables, spinners, actionable errors | basic output |
-| Shared library | cli-kit (consistent with other tools) | standalone |
-| Diagnostics | `doctor` command | none |
-| Auto-backup | on every switch (configurable) | manual only |
-| Help | detailed examples, suggestions on error | minimal |
+Credentials (OAuth tokens) live exclusively in the OS keychain via `go-keyring` (macOS Keychain, Linux Secret Service, Windows Credential Manager). They are never written to disk in plaintext.
 
 ## Output
 
@@ -172,4 +188,11 @@ Supports `-o json` and `-o table` output formats. Default is auto-detected (tabl
 
 ```bash
 multiclaude list -o json | jq '.[].name'
+```
+
+## Version
+
+```bash
+multiclaude version
+multiclaude --version
 ```

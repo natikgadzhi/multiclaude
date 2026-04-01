@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/cli-kit/table"
@@ -18,17 +19,29 @@ import (
 func newBackupManager() (*backup.Manager, error) {
 	profilesDir, err := config.ProfilesDir()
 	if err != nil {
-		return nil, fmt.Errorf("resolving profiles dir: %w", err)
+		return nil, errors.Wrap(
+			err,
+			"Could not resolve profiles directory",
+			"Check filesystem permissions for ~/.config/multiclaude/profiles",
+		)
 	}
 
 	backupsDir, err := config.BackupsDir()
 	if err != nil {
-		return nil, fmt.Errorf("resolving backups dir: %w", err)
+		return nil, errors.Wrap(
+			err,
+			"Could not resolve backups directory",
+			"Check filesystem permissions for ~/.config/multiclaude/backups",
+		)
 	}
 
 	cfg, err := config.Load("~/.config/multiclaude/config.toml")
 	if err != nil {
-		return nil, fmt.Errorf("loading config: %w", err)
+		return nil, errors.Wrap(
+			err,
+			"Could not load configuration",
+			"Check the TOML syntax in your config file. Minimal example:\n\n  # ~/.config/multiclaude/config.toml\n  default_profile = \"work\"\n  claude_home = \"~/.claude\"\n  auto_backup = true",
+		)
 	}
 
 	ch := claude.NewClaudeHome(cfg.ClaudeHome)

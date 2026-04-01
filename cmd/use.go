@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/natikgadzhi/cli-kit/debug"
+	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/multiclaude/internal/backup"
@@ -39,13 +40,21 @@ func runUse(cmd *cobra.Command, args []string) error {
 	if !store.Exists(name) {
 		profiles, _ := store.List()
 		if len(profiles) == 0 {
-			return fmt.Errorf("profile %q does not exist. No profiles found — run 'multiclaude add <name>' to create one", name)
+			return errors.Wrap(
+				fmt.Errorf("profile %q not found", name),
+				fmt.Sprintf("Profile %q not found", name),
+				"No profiles exist yet. Log into Claude Code first, then run:\n  multiclaude add <name>",
+			)
 		}
 		names := make([]string, len(profiles))
 		for i, p := range profiles {
 			names[i] = p.Name
 		}
-		return fmt.Errorf("profile %q does not exist. Available profiles: %s", name, strings.Join(names, ", "))
+		return errors.Wrap(
+			fmt.Errorf("profile %q not found", name),
+			fmt.Sprintf("Profile %q not found", name),
+			fmt.Sprintf("Available profiles: %s\nSwitch with: multiclaude use <name>", strings.Join(names, ", ")),
+		)
 	}
 
 	// Check if already active.
@@ -78,7 +87,11 @@ func runUse(cmd *cobra.Command, args []string) error {
 	debug.Log("restoring state for target profile %q", name)
 	if err := store.RestoreState(name); err != nil {
 		spin.Finish()
-		return fmt.Errorf("switching to profile %q: %w", name, err)
+		return errors.Wrap(
+			err,
+			fmt.Sprintf("Failed to switch to profile %q", name),
+			"The profile's credentials may be missing from the keychain.\nTry: multiclaude doctor",
+		)
 	}
 
 	// Update active profile state file.
