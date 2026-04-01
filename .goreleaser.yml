@@ -1,0 +1,28 @@
+version: 2
+
+builds:
+  - binary: multiclaude
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/natikgadzhi/multiclaude/cmd.buildVersion={{.Version}}
+      - -X github.com/natikgadzhi/multiclaude/cmd.buildCommit={{.Commit}}
+      - -X github.com/natikgadzhi/multiclaude/cmd.buildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
