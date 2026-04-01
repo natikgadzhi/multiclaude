@@ -29,6 +29,7 @@ type profileListRenderer struct {
 }
 
 func (r *profileListRenderer) RenderTable(t *table.Table) {
+	t.RowBorders = true
 	t.Header("Profile", "Account", "Status")
 	for _, p := range r.profiles {
 		status := ""
