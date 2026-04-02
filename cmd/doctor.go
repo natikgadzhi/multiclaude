@@ -111,6 +111,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// Check 5: Active profile consistency.
 	if profilesDirErr == nil {
 		store := profile.NewStore(profilesDir, ch)
+		if activeFile, err := mcconfig.ActiveFilePath(); err == nil {
+			store.SetActiveFile(activeFile)
+		}
 		results = append(results, checkActiveProfile(ch, store))
 	}
 
