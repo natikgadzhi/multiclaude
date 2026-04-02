@@ -13,7 +13,15 @@ import (
 var removeCmd = &cobra.Command{
 	Use:   "remove <name>",
 	Short: "Delete a profile and its keychain entries",
-	Args:  cobra.ExactArgs(1),
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf(`profile name required
+
+  multiclaude remove <name>
+  multiclaude list    — see available profiles`)
+		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
 	RunE:  runRemove,
 }
 
