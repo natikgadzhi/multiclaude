@@ -73,7 +73,6 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		cfg = &mcconfig.Config{
 			ClaudeHome: "~/.claude",
-			AutoBackup: true,
 		}
 	}
 
@@ -183,8 +182,7 @@ func checkConfig(path string) checkResult {
 			detail: fmt.Sprintf("invalid: %v", err),
 			suggestion: "Fix the TOML syntax in " + expanded + ". Minimal example:\n" +
 				"  default_profile = \"work\"\n" +
-				"  claude_home = \"~/.claude\"\n" +
-				"  auto_backup = true",
+				"  claude_home = \"~/.claude\"",
 		}
 	}
 	return checkResult{

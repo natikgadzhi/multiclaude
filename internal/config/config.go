@@ -17,14 +17,12 @@ import (
 type Config struct {
 	DefaultProfile string `toml:"default_profile"`
 	ClaudeHome     string `toml:"claude_home"` // default: ~/.claude
-	AutoBackup     bool   `toml:"auto_backup"` // default: true
 }
 
 // defaults returns a Config populated with default values.
 func defaults() *Config {
 	return &Config{
 		ClaudeHome: "~/.claude",
-		AutoBackup: true,
 	}
 }
 
@@ -79,20 +77,6 @@ func ProfilesDir() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(base, "profiles")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
-// BackupsDir returns the path to ~/.config/multiclaude/backups,
-// creating the directory if it does not exist.
-func BackupsDir() (string, error) {
-	base, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(base, "backups")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

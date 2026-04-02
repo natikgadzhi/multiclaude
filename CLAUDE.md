@@ -15,7 +15,6 @@ cmd/
   current.go       — `current` command: show active profile
   remove.go        — `remove` command: delete a profile
   rename.go        — `rename` command: rename a profile
-  backup.go        — `backup` subcommand group (create, list, restore)
   doctor.go        — `doctor` command: diagnose issues
   version.go       — version command (via cli-kit)
 internal/

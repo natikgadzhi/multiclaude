@@ -108,17 +108,6 @@ Rename a profile. Updates the profile directory, keychain entry, and active trac
 multiclaude rename work work-main
 ```
 
-### `multiclaude backup`
-
-Create and manage snapshots of all profiles and their credentials. Useful before upgrades.
-
-```bash
-multiclaude backup create before-upgrade
-multiclaude backup list
-multiclaude backup restore before-upgrade
-multiclaude backup delete before-upgrade
-```
-
 ### `multiclaude doctor`
 
 Diagnose common issues: missing credentials, broken state, stale profiles.
@@ -137,9 +126,6 @@ default_profile = "work"
 
 # Claude home directory (rarely needs changing)
 claude_home = "~/.claude"
-
-# Auto-backup before every profile switch
-auto_backup = true
 ```
 
 ## How it works
@@ -150,18 +136,13 @@ multiclaude stores profile data under `~/.config/multiclaude/` and credentials i
 ~/.config/multiclaude/
 ├── config.toml                 # multiclaude settings
 ├── active                      # name of the currently active profile
-├── profiles/
-│   ├── work/
-│   │   ├── metadata.json       # email, creation time
-│   │   └── settings.json       # Claude settings snapshot
-│   └── personal/
-│       ├── metadata.json
-│       └── settings.json
-└── backups/
-    └── before-upgrade/
+└── profiles/
+    ├── work/
+    │   ├── metadata.json       # email, creation time
+    │   └── settings.json       # Claude settings snapshot
+    └── personal/
         ├── metadata.json
-        ├── profiles/           # copy of all profile directories
-        └── keychain/           # exported keychain credentials
+        └── settings.json
 
 ~/.claude/                      # Claude Code reads from here
 ├── .credentials.json           # written by multiclaude on switch

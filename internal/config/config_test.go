@@ -22,9 +22,6 @@ func TestLoad(t *testing.T) {
 				if cfg.DefaultProfile != "" {
 					t.Errorf("DefaultProfile = %q, want empty", cfg.DefaultProfile)
 				}
-				if cfg.AutoBackup != true {
-					t.Error("AutoBackup = false, want true")
-				}
 				// ClaudeHome stays as unexpanded default (~/.claude)
 				// because we skip expansion when file is missing.
 				if cfg.ClaudeHome != "~/.claude" {
@@ -36,7 +33,6 @@ func TestLoad(t *testing.T) {
 			name: "valid config loads all fields",
 			content: `default_profile = "work"
 claude_home = "/tmp/test-claude"
-auto_backup = false
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
@@ -46,9 +42,6 @@ auto_backup = false
 				}
 				if cfg.ClaudeHome != "/tmp/test-claude" {
 					t.Errorf("ClaudeHome = %q, want %q", cfg.ClaudeHome, "/tmp/test-claude")
-				}
-				if cfg.AutoBackup != false {
-					t.Error("AutoBackup = true, want false")
 				}
 			},
 		},
@@ -61,9 +54,6 @@ auto_backup = false
 				t.Helper()
 				if cfg.DefaultProfile != "personal" {
 					t.Errorf("DefaultProfile = %q, want %q", cfg.DefaultProfile, "personal")
-				}
-				if cfg.AutoBackup != true {
-					t.Error("AutoBackup = false, want true")
 				}
 				// ClaudeHome should be expanded from default.
 				home, _ := os.UserHomeDir()
@@ -141,21 +131,3 @@ func TestProfilesDir(t *testing.T) {
 	}
 }
 
-func TestBackupsDir(t *testing.T) {
-	dir, err := BackupsDir()
-	if err != nil {
-		t.Fatalf("BackupsDir() error: %v", err)
-	}
-	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("stat BackupsDir: %v", err)
-	}
-	if !info.IsDir() {
-		t.Errorf("BackupsDir %q is not a directory", dir)
-	}
-	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".config", "multiclaude", "backups")
-	if dir != want {
-		t.Errorf("BackupsDir() = %q, want %q", dir, want)
-	}
-}

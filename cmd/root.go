@@ -47,8 +47,7 @@ Examples:
   multiclaude list                      Show all profiles
   multiclaude list -o json              Show all profiles as JSON
   multiclaude current                   Show the active profile
-  multiclaude doctor                    Diagnose common issues
-  multiclaude backup create pre-upgrade Create a backup snapshot`,
+  multiclaude doctor                    Diagnose common issues`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -67,7 +66,6 @@ func init() {
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(renameCmd)
 	rootCmd.AddCommand(doctorCmd)
-	rootCmd.AddCommand(backupCmd)
 }
 
 // Execute runs the root command and exits on error.

@@ -25,7 +25,7 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 		return nil, errors.Wrap(
 			err,
 			"Could not load configuration",
-			"Check the TOML syntax in your config file. Minimal example:\n\n  # ~/.config/multiclaude/config.toml\n  default_profile = \"work\"\n  claude_home = \"~/.claude\"\n  auto_backup = true",
+			"Check the TOML syntax in your config file. Minimal example:\n\n  # ~/.config/multiclaude/config.toml\n  default_profile = \"work\"\n  claude_home = \"~/.claude\"",
 		)
 	}
 	return cfg, nil

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/natikgadzhi/multiclaude/internal/backup"
 	"github.com/natikgadzhi/multiclaude/internal/claude"
 	"github.com/natikgadzhi/multiclaude/internal/keychain"
 	"github.com/natikgadzhi/multiclaude/internal/profile"
@@ -40,7 +39,6 @@ type testEnv struct {
 	store      *profile.Store
 	claudeHome *claude.ClaudeHome
 	profileDir string
-	backupsDir string
 	activeFile string
 	claudeDir  string
 }
@@ -51,11 +49,10 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	tmpDir := t.TempDir()
 	profilesDir := filepath.Join(tmpDir, "profiles")
-	backupsDir := filepath.Join(tmpDir, "backups")
 	claudeDir := filepath.Join(tmpDir, ".claude")
 	activeFile := filepath.Join(tmpDir, "active")
 
-	for _, d := range []string{profilesDir, backupsDir, claudeDir} {
+	for _, d := range []string{profilesDir, claudeDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +77,6 @@ func newTestEnv(t *testing.T) *testEnv {
 		store:      store,
 		claudeHome: ch,
 		profileDir: profilesDir,
-		backupsDir: backupsDir,
 		activeFile: activeFile,
 		claudeDir:  claudeDir,
 	}
@@ -322,55 +318,3 @@ func TestIntegration_DoctorHealthy(t *testing.T) {
 	}
 }
 
-// TestIntegration_AutoBackupOnSwitch tests that auto-backup creates a backup
-// and prune keeps only the most recent N auto-backups.
-func TestIntegration_AutoBackupOnSwitch(t *testing.T) {
-	env := newTestEnv(t)
-
-	// Create two profiles.
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
-		t.Fatal(err)
-	}
-	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), "personal@example.com"); err != nil {
-		t.Fatal(err)
-	}
-
-	mgr := backup.NewManager(env.backupsDir, env.store)
-
-	// Simulate 7 auto-backup cycles.
-	autoNames := []string{
-		"auto-2025-01-01T10-00-00",
-		"auto-2025-01-02T10-00-00",
-		"auto-2025-01-03T10-00-00",
-		"auto-2025-01-04T10-00-00",
-		"auto-2025-01-05T10-00-00",
-		"auto-2025-01-06T10-00-00",
-		"auto-2025-01-07T10-00-00",
-	}
-	for _, name := range autoNames {
-		if err := mgr.Create(name); err != nil {
-			t.Fatalf("Create(%q) error = %v", name, err)
-		}
-	}
-
-	// Prune to keep 5.
-	if err := mgr.PruneAutoBackups(5); err != nil {
-		t.Fatalf("PruneAutoBackups() error = %v", err)
-	}
-
-	backups, err := mgr.List()
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
-	}
-
-	if len(backups) != 5 {
-		t.Errorf("after prune: %d backups remain, want 5", len(backups))
-	}
-
-	// The 2 oldest should have been pruned.
-	for _, b := range backups {
-		if b.Name == "auto-2025-01-01T10-00-00" || b.Name == "auto-2025-01-02T10-00-00" {
-			t.Errorf("oldest backup %q should have been pruned", b.Name)
-		}
-	}
-}
