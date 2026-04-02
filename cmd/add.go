@@ -80,20 +80,34 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Log out and prompt for a new login before capturing credentials.
-	if err := doLoginFlow(cmd, ch); err != nil {
+	if err := doLoginFlow(cmd); err != nil {
 		return err
 	}
 
-	// Read current credentials from Claude Code's keychain entry.
+	// Step 1: claude auth status is the source of truth for the new account.
+	authStatus := getClaudeAuthStatus()
+	if authStatus == nil || !authStatus.LoggedIn {
+		return errors.Wrap(
+			fmt.Errorf("claude auth status reports not logged in"),
+			"No active Claude Code session found after login",
+			"Make sure you completed the login flow:\n  claude auth login\nThen try again:\n  multiclaude add "+name,
+		)
+	}
+
+	debug.Log("claude auth status: email=%s org=%s plan=%s",
+		authStatus.Email, authStatus.OrgName, authStatus.SubscriptionType)
+
+	// Step 2: Read the keychain credentials and verify they match.
 	creds, err := ch.ReadCredentials()
 	if err != nil {
 		return errors.Wrap(
 			err,
-			"No active Claude Code session found",
-			"Log into Claude Code first, then run 'multiclaude add' again.",
+			"No credentials found in keychain",
+			"Claude Code may not have written credentials yet. Try logging in again:\n  claude auth login",
 		)
 	}
 
+	// Parse the email from the keychain credentials to cross-check.
 	info, err := ch.ActiveAccountInfo()
 	if err != nil {
 		return errors.Wrap(
@@ -102,9 +116,27 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			"Ensure you are logged into Claude Code with a valid account.",
 		)
 	}
-	label := info.Label()
 
-	debug.Log("adding profile %q for %s", name, label)
+	if info.Email == "" || authStatus.Email == "" {
+		debug.Log("warning: cannot fully verify email cross-check (keychain=%q auth=%q); proceeding",
+			info.Email, authStatus.Email)
+	} else if info.Email != authStatus.Email {
+		return errors.Wrap(
+			fmt.Errorf("credential mismatch: keychain has %q but auth status reports %q", info.Email, authStatus.Email),
+			"Credential mismatch after login",
+			"The keychain still contains stale credentials from a previous account.\n"+
+				"Try logging out and in again:\n  claude auth logout\n  claude auth login\n"+
+				"Then run:\n  multiclaude add "+name,
+		)
+	} else {
+		debug.Log("credentials verified: keychain email %q matches auth status", info.Email)
+	}
+
+	opts := profile.CreateOptions{
+		Email:            authStatus.Email,
+		OrgName:          authStatus.OrgName,
+		SubscriptionType: authStatus.SubscriptionType,
+	}
 
 	settings, err := ch.ReadSettings()
 	if err != nil {
@@ -112,12 +144,10 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		settings = make(map[string]any)
 	}
 
-	if err := store.Create(name, creds, settings, profile.CreateOptions{Email: label}); err != nil {
+	if err := store.Create(name, creds, settings, opts); err != nil {
 		return fmt.Errorf("creating profile: %w", err)
 	}
 
-	// After the login flow, ~/.claude/ contains the new account's credentials,
-	// so this profile is now the active one.
 	debug.Log("marking %q as active", name)
 	if err := store.WriteActive(name); err != nil {
 		debug.Log("failed to write active state: %v", err)
@@ -134,14 +164,17 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	label := authStatus.Email
+	if authStatus.SubscriptionType != "" {
+		label = fmt.Sprintf("%s (%s)", authStatus.Email, authStatus.SubscriptionType)
+	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Added profile: %s (%s)\n", name, label)
 	return nil
 }
 
-// doLoginFlow handles the --login flag: logs out of Claude Code and
-// guides the user through authenticating a new account.
-func doLoginFlow(cmd *cobra.Command, ch *claude.ClaudeHome) error {
-	// Check if claude is available.
+// doLoginFlow logs out of Claude Code and guides the user through
+// authenticating a new account.
+func doLoginFlow(cmd *cobra.Command) error {
 	if _, err := exec.LookPath("claude"); err != nil {
 		return errors.Wrap(
 			err,
@@ -150,7 +183,6 @@ func doLoginFlow(cmd *cobra.Command, ch *claude.ClaudeHome) error {
 		)
 	}
 
-	// Save current credentials if a profile is active, so we don't lose them.
 	fmt.Fprintln(cmd.ErrOrStderr(), "Logging out of Claude Code...")
 	logoutCmd := exec.Command("claude", "auth", "logout")
 	logoutCmd.Stdout = os.Stdout
@@ -167,15 +199,6 @@ func doLoginFlow(cmd *cobra.Command, ch *claude.ClaudeHome) error {
 
 	reader := bufio.NewReader(os.Stdin)
 	_, _ = reader.ReadString('\n')
-
-	// Verify credentials now exist.
-	if _, err := ch.ReadCredentials(); err != nil {
-		return errors.Wrap(
-			err,
-			"No credentials found after login",
-			"Make sure you completed the login flow: claude auth login",
-		)
-	}
 
 	return nil
 }
