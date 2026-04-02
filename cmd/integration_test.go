@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/natikgadzhi/multiclaude/internal/claude"
@@ -251,6 +252,193 @@ func TestIntegration_AddAndRename(t *testing.T) {
 	}
 	if string(creds) != string(testCreds("user@example.com")) {
 		t.Error("credentials changed after rename")
+	}
+}
+
+// TestIntegration_Uninstall_MultipleProfiles verifies that uninstall refuses
+// when more than one profile exists.
+func TestIntegration_Uninstall_MultipleProfiles(t *testing.T) {
+	env := newTestEnv(t)
+
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), "personal@example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	configDir := t.TempDir() // not used since we expect an early error
+	err := doUninstall(os.Stdout, strings.NewReader(""), env.store, configDir, false, false)
+	if err == nil {
+		t.Fatal("expected error when more than one profile exists, got nil")
+	}
+	if !strings.Contains(err.Error(), "2 profiles exist") {
+		t.Errorf("error message = %q, want it to contain '2 profiles exist'", err.Error())
+	}
+}
+
+// TestIntegration_Uninstall_ZeroProfiles verifies that uninstall succeeds when
+// no profiles exist and removes the config directory.
+func TestIntegration_Uninstall_ZeroProfiles(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Use a temp dir as the configDir for isolation.
+	configDir := filepath.Join(t.TempDir(), "multiclaude")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Place a marker file inside to confirm deletion.
+	markerPath := filepath.Join(configDir, "active")
+	if err := os.WriteFile(markerPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false, false)
+	if err != nil {
+		t.Fatalf("doUninstall() error = %v", err)
+	}
+
+	// Config dir should be gone.
+	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
+		t.Error("config directory still exists after uninstall")
+	}
+
+	if !strings.Contains(out.String(), "multiclaude state removed") {
+		t.Errorf("output = %q, want it to contain 'multiclaude state removed'", out.String())
+	}
+}
+
+// TestIntegration_Uninstall_OneActiveProfile verifies that uninstall deletes
+// the keychain entry and config dir when one active profile exists.
+func TestIntegration_Uninstall_OneActiveProfile(t *testing.T) {
+	env := newTestEnv(t)
+
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.WriteActive("work"); err != nil {
+		t.Fatal(err)
+	}
+
+	configDir := filepath.Join(t.TempDir(), "multiclaude")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false, false)
+	if err != nil {
+		t.Fatalf("doUninstall() error = %v", err)
+	}
+
+	// Config dir should be gone.
+	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
+		t.Error("config directory still exists after uninstall")
+	}
+
+	// Keychain entry should be gone.
+	if keychain.HasCredentials("work") {
+		t.Error("keychain still has credentials for 'work' after uninstall")
+	}
+
+	if !strings.Contains(out.String(), "multiclaude state removed") {
+		t.Errorf("output = %q, want it to contain 'multiclaude state removed'", out.String())
+	}
+}
+
+// TestIntegration_Uninstall_OneInactiveProfile_Force verifies that uninstall
+// proceeds with --force when the single profile is not the active one.
+func TestIntegration_Uninstall_OneInactiveProfile_Force(t *testing.T) {
+	env := newTestEnv(t)
+
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	// Do NOT call WriteActive — so the profile is not marked active.
+
+	configDir := filepath.Join(t.TempDir(), "multiclaude")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false, true /* force */)
+	if err != nil {
+		t.Fatalf("doUninstall(force=true) error = %v", err)
+	}
+
+	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
+		t.Error("config directory still exists after uninstall with --force")
+	}
+
+	if keychain.HasCredentials("work") {
+		t.Error("keychain still has credentials for 'work' after uninstall")
+	}
+}
+
+// TestIntegration_Uninstall_OneInactiveProfile_Decline verifies that when the
+// single profile is not active and the user declines the prompt, nothing is deleted.
+func TestIntegration_Uninstall_OneInactiveProfile_Decline(t *testing.T) {
+	env := newTestEnv(t)
+
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	configDir := filepath.Join(t.TempDir(), "multiclaude")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	// User answers "n".
+	err := doUninstall(&out, strings.NewReader("n\n"), env.store, configDir, false, false)
+	if err != nil {
+		t.Fatalf("doUninstall(declined) error = %v", err)
+	}
+
+	// Config dir should still exist (aborted).
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		t.Error("config directory was deleted even though user declined")
+	}
+
+	// Keychain entry should still exist.
+	if !keychain.HasCredentials("work") {
+		t.Error("keychain entry was deleted even though user declined")
+	}
+}
+
+// TestIntegration_Uninstall_DryRun verifies that dry-run does not delete anything.
+func TestIntegration_Uninstall_DryRun(t *testing.T) {
+	env := newTestEnv(t)
+
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.WriteActive("work"); err != nil {
+		t.Fatal(err)
+	}
+
+	configDir := filepath.Join(t.TempDir(), "multiclaude")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, true /* dryRun */, false)
+	if err != nil {
+		t.Fatalf("doUninstall(dry-run) error = %v", err)
+	}
+
+	// Config dir should still exist.
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		t.Error("config directory was deleted during dry-run")
+	}
+
+	// Keychain entry should still exist.
+	if !keychain.HasCredentials("work") {
+		t.Error("keychain entry was deleted during dry-run")
 	}
 }
 

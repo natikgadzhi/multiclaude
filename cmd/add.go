@@ -15,26 +15,30 @@ import (
 
 var addCmd = &cobra.Command{
 	Use:   "add <name>",
-	Short: "Save the current Claude Code session as a named profile",
-	Long: `Save the current Claude Code session as a named profile.
+	Short: "Log into a Claude Code account and save it as a named profile",
+	Long: `Log into a Claude Code account and save it as a named profile.
 
-Captures the current credentials from the OS keychain and saves them
-under the given profile name.
+Logs out of the current Claude Code session, opens a new login flow so
+you can authenticate a different account, then saves those credentials
+under the given profile name.`,
+	Example: `  multiclaude add work
+  multiclaude add personal`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf(`profile name required
 
-With --login, logs out of Claude Code first and opens a new login flow
-so you can authenticate a different account, then saves it as the profile.`,
-	Example: `  # Save current session
-  multiclaude add work
+multiclaude add logs into a new Claude Code account and saves it as a named profile.
 
-  # Log into a new account and save it
-  multiclaude add personal --login`,
-	Args: cobra.ExactArgs(1),
+Usage:   multiclaude add <name>
+Example: multiclaude add work`)
+		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
 	RunE: runAdd,
 }
 
 func init() {
 	addCmd.Flags().Bool("set-default", false, "Set this profile as the default")
-	addCmd.Flags().Bool("login", false, "Log out and start a new login flow before saving")
 }
 
 func runAdd(cmd *cobra.Command, args []string) error {
@@ -64,12 +68,9 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	ch := claude.NewClaudeHome(cfg.ClaudeHome)
 
-	// Handle --login: log out, prompt for new login, then capture.
-	login, _ := cmd.Flags().GetBool("login")
-	if login {
-		if err := doLoginFlow(cmd, ch); err != nil {
-			return err
-		}
+	// Log out and prompt for a new login before capturing credentials.
+	if err := doLoginFlow(cmd, ch); err != nil {
+		return err
 	}
 
 	// Read current credentials from Claude Code's keychain entry.

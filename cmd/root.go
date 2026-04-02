@@ -66,6 +66,7 @@ func init() {
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(renameCmd)
 	rootCmd.AddCommand(doctorCmd)
+	rootCmd.AddCommand(uninstallCmd)
 }
 
 // Execute runs the root command and exits on error.

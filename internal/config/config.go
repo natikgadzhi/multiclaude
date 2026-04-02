@@ -69,6 +69,16 @@ func configDir() (string, error) {
 	return dir, nil
 }
 
+// Dir returns the path to ~/.config/multiclaude without creating it.
+// Use this when you need the path for deletion or existence checks.
+func Dir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "multiclaude"), nil
+}
+
 // ProfilesDir returns the path to ~/.config/multiclaude/profiles,
 // creating the directory if it does not exist.
 func ProfilesDir() (string, error) {
