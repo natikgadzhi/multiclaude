@@ -47,13 +47,13 @@ func (s checkStatus) String() string {
 func (s checkStatus) symbol() string {
 	switch s {
 	case statusPass:
-		return "ok"
+		return "✓"
 	case statusWarn:
-		return "!!"
+		return "⚠"
 	case statusFail:
-		return "XX"
+		return "✗"
 	default:
-		return "??"
+		return "?"
 	}
 }
 
