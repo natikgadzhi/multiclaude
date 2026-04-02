@@ -18,9 +18,8 @@ var listCmd = &cobra.Command{
 
 // profileListJSON is the JSON representation of a profile for list output.
 type profileListJSON struct {
-	Name    string `json:"name"`
-	Account string `json:"account"`
-	Status  string `json:"status"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 // profileListRenderer implements output.TableRenderer for a slice of profiles.
@@ -30,13 +29,13 @@ type profileListRenderer struct {
 
 func (r *profileListRenderer) RenderTable(t *table.Table) {
 	t.RowBorders = true
-	t.Header("Profile", "Account", "Status")
+	t.Header("Profile", "Status")
 	for _, p := range r.profiles {
 		status := ""
 		if p.IsActive {
 			status = "active"
 		}
-		t.Row(p.Name, p.Email, status)
+		t.Row(p.Name, status)
 	}
 }
 
@@ -76,9 +75,8 @@ func runList(cmd *cobra.Command, _ []string) error {
 			status = "active"
 		}
 		jsonData[i] = profileListJSON{
-			Name:    p.Name,
-			Account: p.Email,
-			Status:  status,
+			Name:   p.Name,
+			Status: status,
 		}
 	}
 
