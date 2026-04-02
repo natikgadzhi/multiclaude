@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/natikgadzhi/cli-kit/output"
-	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 )
 
@@ -17,14 +16,7 @@ var currentCmd = &cobra.Command{
 
 // currentOutput is the JSON-serializable representation of the active profile.
 type currentOutput struct {
-	Name    string `json:"name"`
-	Account string `json:"account"`
-}
-
-// RenderTable implements output.TableRenderer for currentOutput.
-func (c currentOutput) RenderTable(t *table.Table) {
-	t.Header("Profile", "Account")
-	t.Row(c.Name, c.Account)
+	Name string `json:"name"`
 }
 
 func runCurrent(cmd *cobra.Command, args []string) error {
@@ -48,12 +40,11 @@ func runCurrent(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	p, err := store.Get(activeName)
-	if err != nil {
-		return fmt.Errorf("reading active profile: %w", err)
+	format := output.Resolve(cmd)
+	if output.IsJSON(format) {
+		return output.PrintJSON(currentOutput{Name: activeName})
 	}
 
-	format := output.Resolve(cmd)
-	data := currentOutput{Name: p.Name, Account: p.Email}
-	return output.Print(format, data, data)
+	fmt.Fprintln(cmd.OutOrStdout(), activeName)
+	return nil
 }
