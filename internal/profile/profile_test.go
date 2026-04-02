@@ -62,7 +62,7 @@ func newTestStore(t *testing.T) (*Store, string, string) {
 func TestCreate(t *testing.T) {
 	store, profilesDir, _ := newTestStore(t)
 
-	err := store.Create("work", testCreds(), testSettings(), "alice@example.com")
+	err := store.Create("work", testCreds(), testSettings(), CreateOptions{Email: "alice@example.com"})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -119,7 +119,7 @@ func TestCreate(t *testing.T) {
 func TestGet(t *testing.T) {
 	store, _, _ := newTestStore(t)
 
-	if err := store.Create("personal", testCreds(), testSettings(), "bob@example.com"); err != nil {
+	if err := store.Create("personal", testCreds(), testSettings(), CreateOptions{Email: "bob@example.com"}); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
@@ -154,10 +154,10 @@ func TestGet_NotFound(t *testing.T) {
 func TestList(t *testing.T) {
 	store, _, _ := newTestStore(t)
 
-	if err := store.Create("work", testCreds(), testSettings(), "work@example.com"); err != nil {
+	if err := store.Create("work", testCreds(), testSettings(), CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Create("personal", testCreds(), testSettings(), "personal@example.com"); err != nil {
+	if err := store.Create("personal", testCreds(), testSettings(), CreateOptions{Email: "personal@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -193,10 +193,10 @@ func TestList_ActiveMarked(t *testing.T) {
 	ch := claude.NewClaudeHome(claudeLink)
 	store := NewStore(profilesDir, ch)
 
-	if err := store.Create("work", testCreds(), testSettings(), "work@example.com"); err != nil {
+	if err := store.Create("work", testCreds(), testSettings(), CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Create("personal", testCreds(), testSettings(), "personal@example.com"); err != nil {
+	if err := store.Create("personal", testCreds(), testSettings(), CreateOptions{Email: "personal@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -224,7 +224,7 @@ func TestList_ActiveMarked(t *testing.T) {
 func TestDelete(t *testing.T) {
 	store, profilesDir, _ := newTestStore(t)
 
-	if err := store.Create("doomed", testCreds(), testSettings(), "doomed@example.com"); err != nil {
+	if err := store.Create("doomed", testCreds(), testSettings(), CreateOptions{Email: "doomed@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,7 +255,7 @@ func TestDelete_NotFound(t *testing.T) {
 func TestRename(t *testing.T) {
 	store, profilesDir, _ := newTestStore(t)
 
-	if err := store.Create("old-name", testCreds(), testSettings(), "user@example.com"); err != nil {
+	if err := store.Create("old-name", testCreds(), testSettings(), CreateOptions{Email: "user@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -301,10 +301,10 @@ func TestRename_OldNotFound(t *testing.T) {
 func TestRename_NewAlreadyExists(t *testing.T) {
 	store, _, _ := newTestStore(t)
 
-	if err := store.Create("first", testCreds(), testSettings(), "a@example.com"); err != nil {
+	if err := store.Create("first", testCreds(), testSettings(), CreateOptions{Email: "a@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Create("second", testCreds(), testSettings(), "b@example.com"); err != nil {
+	if err := store.Create("second", testCreds(), testSettings(), CreateOptions{Email: "b@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -321,7 +321,7 @@ func TestExists(t *testing.T) {
 		t.Error("Exists() = true for missing profile, want false")
 	}
 
-	if err := store.Create("yep", testCreds(), testSettings(), "yep@example.com"); err != nil {
+	if err := store.Create("yep", testCreds(), testSettings(), CreateOptions{Email: "yep@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -343,7 +343,7 @@ func TestActiveProfileName_Symlink(t *testing.T) {
 	ch := claude.NewClaudeHome(claudeLink)
 	store := NewStore(profilesDir, ch)
 
-	if err := store.Create("active-profile", testCreds(), testSettings(), "active@example.com"); err != nil {
+	if err := store.Create("active-profile", testCreds(), testSettings(), CreateOptions{Email: "active@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -441,7 +441,7 @@ func TestList_SkipsNonProfileDirs(t *testing.T) {
 	}
 
 	// Create a real profile.
-	if err := store.Create("real", testCreds(), testSettings(), "real@example.com"); err != nil {
+	if err := store.Create("real", testCreds(), testSettings(), CreateOptions{Email: "real@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -454,5 +454,37 @@ func TestList_SkipsNonProfileDirs(t *testing.T) {
 	}
 	if profiles[0].Name != "real" {
 		t.Errorf("List()[0].Name = %q, want %q", profiles[0].Name, "real")
+	}
+}
+
+func TestCreate_WithOrgFields(t *testing.T) {
+	keyringlib.MockInit()
+	store, _, _ := newTestStore(t)
+
+	creds := testCreds()
+	settings := testSettings()
+	opts := CreateOptions{
+		Email:            "natik@respawn.io",
+		OrgName:          "Lambda Inc",
+		SubscriptionType: "enterprise",
+	}
+
+	if err := store.Create("work", creds, settings, opts); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	p, err := store.Get("work")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if p.OrgName != "Lambda Inc" {
+		t.Errorf("OrgName = %q, want %q", p.OrgName, "Lambda Inc")
+	}
+	if p.SubscriptionType != "enterprise" {
+		t.Errorf("SubscriptionType = %q, want %q", p.SubscriptionType, "enterprise")
+	}
+	if p.Email != "natik@respawn.io" {
+		t.Errorf("Email = %q, want %q", p.Email, "natik@respawn.io")
 	}
 }

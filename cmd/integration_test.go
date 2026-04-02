@@ -106,7 +106,7 @@ func TestIntegration_AddAndList(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Add a profile.
-	err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com")
+	err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -138,10 +138,10 @@ func TestIntegration_AddUseCurrent(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Add two profiles.
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), "personal@example.com"); err != nil {
+	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), profile.CreateOptions{Email: "personal@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,7 +198,7 @@ func TestIntegration_AddAndRemove(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Add a profile.
-	if err := env.store.Create("temp", testCreds("temp@example.com"), testSettings(), "temp@example.com"); err != nil {
+	if err := env.store.Create("temp", testCreds("temp@example.com"), testSettings(), profile.CreateOptions{Email: "temp@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -233,7 +233,7 @@ func TestIntegration_AddAndRename(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Add a profile.
-	if err := env.store.Create("old-name", testCreds("user@example.com"), testSettings(), "user@example.com"); err != nil {
+	if err := env.store.Create("old-name", testCreds("user@example.com"), testSettings(), profile.CreateOptions{Email: "user@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -277,10 +277,10 @@ func TestIntegration_AddAndRename(t *testing.T) {
 func TestIntegration_Uninstall_MultipleProfiles(t *testing.T) {
 	env := newTestEnv(t)
 
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), "personal@example.com"); err != nil {
+	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), profile.CreateOptions{Email: "personal@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -331,7 +331,7 @@ func TestIntegration_Uninstall_ZeroProfiles(t *testing.T) {
 func TestIntegration_Uninstall_OneActiveProfile(t *testing.T) {
 	env := newTestEnv(t)
 
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := env.store.WriteActive("work"); err != nil {
@@ -369,7 +369,7 @@ func TestIntegration_Uninstall_OneActiveProfile(t *testing.T) {
 func TestIntegration_Uninstall_OneInactiveProfile_Confirm(t *testing.T) {
 	env := newTestEnv(t)
 
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 	// Do NOT call WriteActive — so the profile is not marked active.
@@ -399,7 +399,7 @@ func TestIntegration_Uninstall_OneInactiveProfile_Confirm(t *testing.T) {
 func TestIntegration_Uninstall_OneInactiveProfile_Decline(t *testing.T) {
 	env := newTestEnv(t)
 
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -430,7 +430,7 @@ func TestIntegration_Uninstall_OneInactiveProfile_Decline(t *testing.T) {
 func TestIntegration_Uninstall_DryRun(t *testing.T) {
 	env := newTestEnv(t)
 
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := env.store.WriteActive("work"); err != nil {
@@ -467,10 +467,10 @@ func TestIntegration_DoctorHealthy(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Create two valid profiles.
-	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
+	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), profile.CreateOptions{Email: "work@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), "personal@example.com"); err != nil {
+	if err := env.store.Create("personal", testCreds("personal@example.com"), testSettings(), profile.CreateOptions{Email: "personal@example.com"}); err != nil {
 		t.Fatal(err)
 	}
 

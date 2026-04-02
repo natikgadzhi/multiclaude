@@ -17,16 +17,27 @@ import (
 
 // Profile represents a named Claude Code account profile.
 type Profile struct {
-	Name      string
-	Email     string
-	CreatedAt time.Time
-	IsActive  bool
+	Name             string
+	Email            string
+	OrgName          string
+	SubscriptionType string
+	CreatedAt        time.Time
+	IsActive         bool
 }
 
 // metadata is the on-disk representation of profile metadata.
 type metadata struct {
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
+	Email            string    `json:"email"`
+	OrgName          string    `json:"org_name,omitempty"`
+	SubscriptionType string    `json:"subscription_type,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// CreateOptions holds the metadata for a new profile.
+type CreateOptions struct {
+	Email            string
+	OrgName          string
+	SubscriptionType string
 }
 
 // Store manages profile directories and their associated keychain entries.
@@ -118,9 +129,9 @@ func (s *Store) ProfileDir(name string) string {
 
 // Create builds a new profile with the given name, storing credentials in the
 // keychain and writing metadata and settings snapshots to disk.
-// The email parameter is recorded in metadata.json; the raw creds go only to
+// opts.Email is recorded in metadata.json; the raw creds go only to
 // the keychain and are never persisted on disk.
-func (s *Store) Create(name string, creds []byte, settings map[string]any, email string) error {
+func (s *Store) Create(name string, creds []byte, settings map[string]any, opts CreateOptions) error {
 	dir := s.ProfileDir(name)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -129,8 +140,10 @@ func (s *Store) Create(name string, creds []byte, settings map[string]any, email
 
 	// Write metadata.json.
 	meta := metadata{
-		Email:     email,
-		CreatedAt: time.Now().UTC(),
+		Email:            opts.Email,
+		OrgName:          opts.OrgName,
+		SubscriptionType: opts.SubscriptionType,
+		CreatedAt:        time.Now().UTC(),
 	}
 	metaBytes, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -179,10 +192,12 @@ func (s *Store) Get(name string) (*Profile, error) {
 	active, _ := s.ActiveProfileName()
 
 	return &Profile{
-		Name:      name,
-		Email:     meta.Email,
-		CreatedAt: meta.CreatedAt,
-		IsActive:  name == active,
+		Name:             name,
+		Email:            meta.Email,
+		OrgName:          meta.OrgName,
+		SubscriptionType: meta.SubscriptionType,
+		CreatedAt:        meta.CreatedAt,
+		IsActive:         name == active,
 	}, nil
 }
 
@@ -219,10 +234,12 @@ func (s *Store) List() ([]Profile, error) {
 		}
 
 		profiles = append(profiles, Profile{
-			Name:      name,
-			Email:     meta.Email,
-			CreatedAt: meta.CreatedAt,
-			IsActive:  name == active,
+			Name:             name,
+			Email:            meta.Email,
+			OrgName:          meta.OrgName,
+			SubscriptionType: meta.SubscriptionType,
+			CreatedAt:        meta.CreatedAt,
+			IsActive:         name == active,
 		})
 	}
 

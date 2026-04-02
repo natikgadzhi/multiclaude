@@ -10,6 +10,7 @@ import (
 	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/multiclaude/internal/claude"
 	"github.com/natikgadzhi/multiclaude/internal/config"
+	"github.com/natikgadzhi/multiclaude/internal/profile"
 	"github.com/spf13/cobra"
 )
 
@@ -111,16 +112,15 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		settings = make(map[string]any)
 	}
 
-	if err := store.Create(name, creds, settings, label); err != nil {
+	if err := store.Create(name, creds, settings, profile.CreateOptions{Email: label}); err != nil {
 		return fmt.Errorf("creating profile: %w", err)
 	}
 
-	profiles, _ := store.List()
-	if len(profiles) == 1 {
-		debug.Log("first profile; marking %q as active", name)
-		if err := store.WriteActive(name); err != nil {
-			debug.Log("failed to write active state: %v", err)
-		}
+	// After the login flow, ~/.claude/ contains the new account's credentials,
+	// so this profile is now the active one.
+	debug.Log("marking %q as active", name)
+	if err := store.WriteActive(name); err != nil {
+		debug.Log("failed to write active state: %v", err)
 	}
 
 	setDefault, _ := cmd.Flags().GetBool("set-default")
