@@ -268,7 +268,7 @@ func TestIntegration_Uninstall_MultipleProfiles(t *testing.T) {
 	}
 
 	configDir := t.TempDir() // not used since we expect an early error
-	err := doUninstall(os.Stdout, strings.NewReader(""), env.store, configDir, false, false)
+	err := doUninstall(os.Stdout, strings.NewReader(""), env.store, configDir, false)
 	if err == nil {
 		t.Fatal("expected error when more than one profile exists, got nil")
 	}
@@ -294,7 +294,7 @@ func TestIntegration_Uninstall_ZeroProfiles(t *testing.T) {
 	}
 
 	var out strings.Builder
-	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false, false)
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false)
 	if err != nil {
 		t.Fatalf("doUninstall() error = %v", err)
 	}
@@ -327,7 +327,7 @@ func TestIntegration_Uninstall_OneActiveProfile(t *testing.T) {
 	}
 
 	var out strings.Builder
-	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false, false)
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false)
 	if err != nil {
 		t.Fatalf("doUninstall() error = %v", err)
 	}
@@ -347,9 +347,9 @@ func TestIntegration_Uninstall_OneActiveProfile(t *testing.T) {
 	}
 }
 
-// TestIntegration_Uninstall_OneInactiveProfile_Force verifies that uninstall
-// proceeds with --force when the single profile is not the active one.
-func TestIntegration_Uninstall_OneInactiveProfile_Force(t *testing.T) {
+// TestIntegration_Uninstall_OneInactiveProfile_Confirm verifies that uninstall
+// proceeds when the single profile is not active and the user confirms.
+func TestIntegration_Uninstall_OneInactiveProfile_Confirm(t *testing.T) {
 	env := newTestEnv(t)
 
 	if err := env.store.Create("work", testCreds("work@example.com"), testSettings(), "work@example.com"); err != nil {
@@ -363,13 +363,13 @@ func TestIntegration_Uninstall_OneInactiveProfile_Force(t *testing.T) {
 	}
 
 	var out strings.Builder
-	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, false, true /* force */)
+	err := doUninstall(&out, strings.NewReader("y\n"), env.store, configDir, false)
 	if err != nil {
-		t.Fatalf("doUninstall(force=true) error = %v", err)
+		t.Fatalf("doUninstall(confirmed) error = %v", err)
 	}
 
 	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
-		t.Error("config directory still exists after uninstall with --force")
+		t.Error("config directory still exists after confirmed uninstall")
 	}
 
 	if keychain.HasCredentials("work") {
@@ -393,7 +393,7 @@ func TestIntegration_Uninstall_OneInactiveProfile_Decline(t *testing.T) {
 
 	var out strings.Builder
 	// User answers "n".
-	err := doUninstall(&out, strings.NewReader("n\n"), env.store, configDir, false, false)
+	err := doUninstall(&out, strings.NewReader("n\n"), env.store, configDir, false)
 	if err != nil {
 		t.Fatalf("doUninstall(declined) error = %v", err)
 	}
@@ -426,7 +426,7 @@ func TestIntegration_Uninstall_DryRun(t *testing.T) {
 	}
 
 	var out strings.Builder
-	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, true /* dryRun */, false)
+	err := doUninstall(&out, strings.NewReader(""), env.store, configDir, true /* dryRun */)
 	if err != nil {
 		t.Fatalf("doUninstall(dry-run) error = %v", err)
 	}

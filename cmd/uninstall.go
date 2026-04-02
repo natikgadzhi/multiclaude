@@ -34,12 +34,10 @@ If more than one profile exists, remove the extras first with
 
 func init() {
 	uninstallCmd.Flags().Bool("dry-run", false, "Print what would be deleted without doing it")
-	uninstallCmd.Flags().BoolP("force", "f", false, "Proceed even if active profile is unclear")
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	force, _ := cmd.Flags().GetBool("force")
 
 	cfg, err := loadConfig(cmd)
 	if err != nil {
@@ -56,12 +54,12 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving config directory: %w", err)
 	}
 
-	return doUninstall(cmd.OutOrStdout(), os.Stdin, store, configDir, dryRun, force)
+	return doUninstall(cmd.OutOrStdout(), os.Stdin, store, configDir, dryRun)
 }
 
 // doUninstall performs the uninstall logic. It is a standalone function so
 // tests can inject an isolated store and config directory.
-func doUninstall(out io.Writer, in io.Reader, store *profile.Store, configDir string, dryRun, force bool) error {
+func doUninstall(out io.Writer, in io.Reader, store *profile.Store, configDir string, dryRun bool) error {
 	profiles, err := store.List()
 	if err != nil {
 		return fmt.Errorf("listing profiles: %w", err)
@@ -82,19 +80,15 @@ func doUninstall(out io.Writer, in io.Reader, store *profile.Store, configDir st
 
 	// If exactly one profile exists, check whether it is the active one.
 	if len(profiles) == 1 && !profiles[0].IsActive {
-		if !force {
-			fmt.Fprintf(os.Stderr, "Warning: profile %q exists but is not active.\n", profiles[0].Name)
-			fmt.Fprintf(os.Stderr, "~/.claude/ may not have valid credentials for this profile.\n")
-			fmt.Fprintf(os.Stderr, "Proceed anyway? This will delete all multiclaude state. [y/N] ")
-			reader := bufio.NewReader(in)
-			answer, _ := reader.ReadString('\n')
-			answer = strings.TrimSpace(strings.ToLower(answer))
-			if answer != "y" && answer != "yes" {
-				fmt.Fprintln(os.Stderr, "Aborted.")
-				return nil
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "Warning: profile %q is not active. Proceeding with --force.\n", profiles[0].Name)
+		fmt.Fprintf(os.Stderr, "Warning: profile %q exists but is not active.\n", profiles[0].Name)
+		fmt.Fprintf(os.Stderr, "~/.claude/ may not have valid credentials for this profile.\n")
+		fmt.Fprintf(os.Stderr, "Proceed anyway? This will delete all multiclaude state. [y/N] ")
+		reader := bufio.NewReader(in)
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(os.Stderr, "Aborted.")
+			return nil
 		}
 	}
 

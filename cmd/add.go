@@ -29,8 +29,8 @@ under the given profile name.`,
 
 multiclaude add logs into a new Claude Code account and saves it as a named profile.
 
-Usage:   multiclaude add <name>
-Example: multiclaude add work`)
+  multiclaude add work
+  multiclaude add personal`)
 		}
 		return cobra.ExactArgs(1)(cmd, args)
 	},
