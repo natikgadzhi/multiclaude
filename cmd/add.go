@@ -68,6 +68,16 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	ch := claude.NewClaudeHome(cfg.ClaudeHome)
 
+	// Save the current active profile's state before logout so we don't lose
+	// any refreshed tokens since the last switch.
+	active, _ := store.ActiveProfileName()
+	if active != "" {
+		debug.Log("saving state for current profile %q before logout", active)
+		if err := store.SaveState(active); err != nil {
+			debug.Log("warning: could not save current profile state: %v", err)
+		}
+	}
+
 	// Log out and prompt for a new login before capturing credentials.
 	if err := doLoginFlow(cmd, ch); err != nil {
 		return err

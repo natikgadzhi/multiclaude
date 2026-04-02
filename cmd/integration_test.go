@@ -10,8 +10,24 @@ import (
 	"github.com/natikgadzhi/multiclaude/internal/claude"
 	"github.com/natikgadzhi/multiclaude/internal/keychain"
 	"github.com/natikgadzhi/multiclaude/internal/profile"
-	"github.com/zalando/go-keyring"
+	keyringlib "github.com/zalando/go-keyring"
 )
+
+// goKeyringAdapter wraps go-keyring to implement claude.Keychain,
+// so tests that use keyring.MockInit() can inject it into ClaudeHome.
+type goKeyringAdapter struct{}
+
+func (goKeyringAdapter) Get(service, account string) (string, error) {
+	return keyringlib.Get(service, account)
+}
+
+func (goKeyringAdapter) Set(service, account, value string) error {
+	return keyringlib.Set(service, account, value)
+}
+
+func (goKeyringAdapter) Delete(service, account string) error {
+	return keyringlib.Delete(service, account)
+}
 
 // testCreds returns fake credential JSON bytes matching Claude Code's format.
 func testCreds(email string) []byte {
@@ -46,7 +62,7 @@ type testEnv struct {
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
-	keyring.MockInit()
+	keyringlib.MockInit()
 
 	tmpDir := t.TempDir()
 	profilesDir := filepath.Join(tmpDir, "profiles")
@@ -71,6 +87,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 
 	ch := claude.NewClaudeHome(claudeDir)
+	ch.Keychain = goKeyringAdapter{}
 	store := profile.NewStore(profilesDir, ch)
 	store.SetActiveFile(activeFile)
 

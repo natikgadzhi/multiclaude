@@ -8,8 +8,23 @@ import (
 
 	"github.com/natikgadzhi/multiclaude/internal/claude"
 	"github.com/natikgadzhi/multiclaude/internal/keychain"
-	"github.com/zalando/go-keyring"
+	keyringlib "github.com/zalando/go-keyring"
 )
+
+// goKeyringAdapter wraps go-keyring to implement claude.Keychain for tests.
+type goKeyringAdapter struct{}
+
+func (goKeyringAdapter) Get(service, account string) (string, error) {
+	return keyringlib.Get(service, account)
+}
+
+func (goKeyringAdapter) Set(service, account, value string) error {
+	return keyringlib.Set(service, account, value)
+}
+
+func (goKeyringAdapter) Delete(service, account string) error {
+	return keyringlib.Delete(service, account)
+}
 
 // testCreds returns fake credential JSON bytes for testing.
 func testCreds() []byte {
@@ -30,7 +45,7 @@ func testSettings() map[string]any {
 // in another temp directory. It also initializes the keyring mock.
 func newTestStore(t *testing.T) (*Store, string, string) {
 	t.Helper()
-	keyring.MockInit()
+	keyringlib.MockInit()
 
 	profilesDir := filepath.Join(t.TempDir(), "profiles")
 	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
@@ -39,6 +54,7 @@ func newTestStore(t *testing.T) (*Store, string, string) {
 
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	ch := claude.NewClaudeHome(claudeDir)
+	ch.Keychain = goKeyringAdapter{}
 
 	return NewStore(profilesDir, ch), profilesDir, claudeDir
 }
@@ -165,7 +181,7 @@ func TestList(t *testing.T) {
 }
 
 func TestList_ActiveMarked(t *testing.T) {
-	keyring.MockInit()
+	keyringlib.MockInit()
 
 	tmpDir := t.TempDir()
 	profilesDir := filepath.Join(tmpDir, "profiles")
@@ -315,7 +331,7 @@ func TestExists(t *testing.T) {
 }
 
 func TestActiveProfileName_Symlink(t *testing.T) {
-	keyring.MockInit()
+	keyringlib.MockInit()
 
 	tmpDir := t.TempDir()
 	profilesDir := filepath.Join(tmpDir, "profiles")
@@ -347,7 +363,7 @@ func TestActiveProfileName_Symlink(t *testing.T) {
 }
 
 func TestActiveProfileName_NotSymlink(t *testing.T) {
-	keyring.MockInit()
+	keyringlib.MockInit()
 
 	tmpDir := t.TempDir()
 	profilesDir := filepath.Join(tmpDir, "profiles")
@@ -373,7 +389,7 @@ func TestActiveProfileName_NotSymlink(t *testing.T) {
 }
 
 func TestActiveProfileName_NoClaudeHome(t *testing.T) {
-	keyring.MockInit()
+	keyringlib.MockInit()
 
 	tmpDir := t.TempDir()
 	profilesDir := filepath.Join(tmpDir, "profiles")

@@ -4,18 +4,32 @@
 package claude
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
-
-	"github.com/zalando/go-keyring"
+	"strings"
 )
+
+// Keychain abstracts read/write/delete of a single keychain entry.
+// The default implementation uses /usr/bin/security on macOS.
+// Tests can inject an alternative (e.g. go-keyring mock).
+type Keychain interface {
+	Get(service, account string) (string, error)
+	Set(service, account, value string) error
+	Delete(service, account string) error
+}
 
 // ClaudeHome represents a Claude Code home directory (typically ~/.claude).
 type ClaudeHome struct {
-	Path string
+	Path     string
+	Keychain Keychain // nil means use the default macOS security keychain
 }
 
 // NewClaudeHome creates a ClaudeHome pointing at the given directory path.
@@ -73,20 +87,124 @@ func (ch *ClaudeHome) SymlinkTarget() (string, error) {
 
 // ReadCredentials reads Claude Code's credentials from the OS keychain.
 // Returns the raw JSON bytes (the entire credential object).
+//
+// When Keychain is nil, uses /usr/bin/security directly instead of go-keyring
+// to avoid the base64 prefix that go-keyring adds on Set(). Handles backwards
+// compatibility with entries previously written by go-keyring.
 func (ch *ClaudeHome) ReadCredentials() ([]byte, error) {
-	secret, err := keyring.Get(claudeKeychainService, claudeKeychainAccount())
-	if err != nil {
-		return nil, fmt.Errorf("reading credentials from keychain: %w", err)
+	account := claudeKeychainAccount()
+
+	var secret string
+	if ch.Keychain != nil {
+		s, err := ch.Keychain.Get(claudeKeychainService, account)
+		if err != nil {
+			return nil, fmt.Errorf("reading credentials from keychain: %w", err)
+		}
+		secret = s
+	} else {
+		s, err := securityGet(claudeKeychainService, account)
+		if err != nil {
+			return nil, err
+		}
+		secret = s
 	}
-	return []byte(secret), nil
+
+	return decodeKeychainValue(secret)
 }
 
 // WriteCredentials writes credentials to Claude Code's OS keychain entry.
+//
+// When Keychain is nil, uses /usr/bin/security directly to write raw JSON
+// without the base64 prefix that go-keyring would add. This ensures Claude
+// Code (TypeScript/Node) can read the keychain value directly.
 func (ch *ClaudeHome) WriteCredentials(data []byte) error {
-	if err := keyring.Set(claudeKeychainService, claudeKeychainAccount(), string(data)); err != nil {
+	account := claudeKeychainAccount()
+
+	if ch.Keychain != nil {
+		return ch.Keychain.Set(claudeKeychainService, account, string(data))
+	}
+	return securitySet(claudeKeychainService, account, string(data))
+}
+
+// decodeKeychainValue handles backwards compatibility with go-keyring encoded values.
+// go-keyring on macOS wraps all values with a "go-keyring-base64:" or "go-keyring-encoded:"
+// prefix. If present, the prefix is stripped and the value is decoded.
+func decodeKeychainValue(secret string) ([]byte, error) {
+	const base64Prefix = "go-keyring-base64:"
+	const hexPrefix = "go-keyring-encoded:"
+	switch {
+	case strings.HasPrefix(secret, base64Prefix):
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(secret, base64Prefix))
+		if err != nil {
+			return nil, fmt.Errorf("decoding base64 credentials: %w", err)
+		}
+		return decoded, nil
+	case strings.HasPrefix(secret, hexPrefix):
+		decoded, err := hex.DecodeString(strings.TrimPrefix(secret, hexPrefix))
+		if err != nil {
+			return nil, fmt.Errorf("decoding hex credentials: %w", err)
+		}
+		return decoded, nil
+	default:
+		return []byte(secret), nil
+	}
+}
+
+// securityGet reads a value from the macOS keychain using /usr/bin/security.
+func securityGet(service, account string) (string, error) {
+	cmd := exec.Command("/usr/bin/security", "find-generic-password",
+		"-s", service, "-wa", account)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("reading credentials from keychain: %s", strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+// securitySet writes a raw value to the macOS keychain using /usr/bin/security.
+// The value is written without any encoding prefix, so non-Go consumers
+// (like Claude Code's TypeScript runtime) can read it directly.
+func securitySet(service, account, value string) error {
+	// Delete existing entry first (ignore "not found" errors).
+	delCmd := exec.Command("/usr/bin/security", "delete-generic-password",
+		"-s", service, "-a", account)
+	_ = delCmd.Run()
+
+	// Add via security -i with stdin to avoid shell escaping issues.
+	addCmd := exec.Command("/usr/bin/security", "-i")
+	stdin, err := addCmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("creating stdin pipe: %w", err)
+	}
+
+	if err := addCmd.Start(); err != nil {
+		return fmt.Errorf("starting security command: %w", err)
+	}
+
+	command := fmt.Sprintf("add-generic-password -U -s %s -a %s -w %s\n",
+		shellQuote(service), shellQuote(account), shellQuote(value))
+	if _, err := io.WriteString(stdin, command); err != nil {
+		return fmt.Errorf("writing to security stdin: %w", err)
+	}
+	if err := stdin.Close(); err != nil {
+		return fmt.Errorf("closing security stdin: %w", err)
+	}
+
+	if err := addCmd.Wait(); err != nil {
 		return fmt.Errorf("writing credentials to keychain: %w", err)
 	}
 	return nil
+}
+
+// shellQuote wraps a string in single quotes for safe use in shell commands.
+// Single quotes within the string are escaped as '"'"'.
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 // ReadSettings parses settings.json into a generic map.
