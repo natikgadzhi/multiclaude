@@ -92,15 +92,18 @@ func runUse(cmd *cobra.Command, args []string) error {
 
 	spin.Finish()
 
-	// Look up email for the success message.
+	// Look up metadata for the success message.
 	p, err := store.Get(name)
 	if err != nil {
-		// Profile was switched but we can't read metadata — still report success.
 		fmt.Fprintf(cmd.OutOrStdout(), "Switched to profile: %s\n", name)
 		return nil
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Switched to profile: %s (%s)\n", name, p.Email)
+	label := p.Email
+	if p.SubscriptionType != "" {
+		label = fmt.Sprintf("%s (%s)", p.Email, p.SubscriptionType)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Switched to profile: %s (%s)\n", name, label)
 	return nil
 }
 

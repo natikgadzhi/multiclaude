@@ -17,9 +17,10 @@ var currentCmd = &cobra.Command{
 
 // currentOutput is the JSON-serializable representation of the active profile.
 type currentOutput struct {
-	Name                  string `json:"name"`
-	Email                 string `json:"email,omitempty"`
-	ClaudeAuthenticated   bool   `json:"claude_authenticated"`
+	Name                   string `json:"name"`
+	Email                  string `json:"email,omitempty"`
+	OrgName                string `json:"org_name,omitempty"`
+	ClaudeAuthenticated    bool   `json:"claude_authenticated"`
 	ClaudeSubscriptionType string `json:"claude_subscription_type,omitempty"`
 }
 
@@ -52,6 +53,7 @@ func runCurrent(cmd *cobra.Command, args []string) error {
 	}
 	if authStatus != nil {
 		result.Email = authStatus.Email
+		result.OrgName = authStatus.OrgName
 		result.ClaudeAuthenticated = authStatus.LoggedIn
 		if authStatus.LoggedIn {
 			result.ClaudeSubscriptionType = authStatus.SubscriptionType
@@ -72,6 +74,9 @@ func runCurrent(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Email:     %s\n", result.Email)
 		}
+	}
+	if result.OrgName != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Org:       %s\n", result.OrgName)
 	}
 	if authStatus != nil {
 		if result.ClaudeAuthenticated {
