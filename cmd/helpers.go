@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"os/exec"
 	"regexp"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	"github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/multiclaude/internal/claude"
 	"github.com/natikgadzhi/multiclaude/internal/config"
@@ -13,6 +16,35 @@ import (
 
 // validName matches alphanumeric characters and dashes, with no leading/trailing dashes.
 var validName = regexp.MustCompile(`^[a-zA-Z0-9]+([a-zA-Z0-9-]*[a-zA-Z0-9]+)?$`)
+
+// claudeAuthStatus represents the JSON output of `claude auth status --json`.
+type claudeAuthStatus struct {
+	LoggedIn         bool   `json:"loggedIn"`
+	AuthMethod       string `json:"authMethod"`
+	APIProvider      string `json:"apiProvider"`
+	Email            string `json:"email"`
+	OrgID            string `json:"orgId"`
+	OrgName          string `json:"orgName"`
+	SubscriptionType string `json:"subscriptionType"`
+}
+
+// getClaudeAuthStatus runs `claude auth status --json` and parses the result.
+// Returns nil if the command fails or is not available.
+func getClaudeAuthStatus() *claudeAuthStatus {
+	cmd := exec.Command("claude", "auth", "status", "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		debug.Log("claude auth status failed: %v", err)
+		return nil
+	}
+
+	var status claudeAuthStatus
+	if err := json.Unmarshal(out, &status); err != nil {
+		debug.Log("could not parse claude auth status output: %v", err)
+		return nil
+	}
+	return &status
+}
 
 // loadConfig reads the multiclaude config from the --config flag path.
 func loadConfig(cmd *cobra.Command) (*config.Config, error) {

@@ -1,12 +1,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 
-	"github.com/natikgadzhi/cli-kit/debug"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/spf13/cobra"
 )
@@ -24,35 +21,6 @@ type currentOutput struct {
 	Email                 string `json:"email,omitempty"`
 	ClaudeAuthenticated   bool   `json:"claude_authenticated"`
 	ClaudeSubscriptionType string `json:"claude_subscription_type,omitempty"`
-}
-
-// claudeAuthStatus represents the JSON output of `claude auth status --json`.
-type claudeAuthStatus struct {
-	LoggedIn         bool   `json:"loggedIn"`
-	AuthMethod       string `json:"authMethod"`
-	APIProvider      string `json:"apiProvider"`
-	Email            string `json:"email"`
-	OrgID            string `json:"orgId"`
-	OrgName          string `json:"orgName"`
-	SubscriptionType string `json:"subscriptionType"`
-}
-
-// getClaudeAuthStatus runs `claude auth status --json` and parses the result.
-// Returns nil if the command fails or is not available.
-func getClaudeAuthStatus() *claudeAuthStatus {
-	cmd := exec.Command("claude", "auth", "status", "--json")
-	out, err := cmd.Output()
-	if err != nil {
-		debug.Log("claude auth status failed: %v", err)
-		return nil
-	}
-
-	var status claudeAuthStatus
-	if err := json.Unmarshal(out, &status); err != nil {
-		debug.Log("could not parse claude auth status output: %v", err)
-		return nil
-	}
-	return &status
 }
 
 func runCurrent(cmd *cobra.Command, args []string) error {
