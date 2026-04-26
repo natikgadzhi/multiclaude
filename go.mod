@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/natikgadzhi/cli-kit v0.4.2
+	github.com/natikgadzhi/cli-kit v0.6.2
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
 )
